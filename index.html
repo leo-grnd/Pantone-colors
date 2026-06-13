@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pantone Matcher | Find Pantone colors from your photos</title>
+    <meta name="description" content="Upload a photo, pick a color, and instantly find its closest Pantone color match. A beautiful and modern tool for designers.">
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-background"></div>
+    <main class="container">
+        <header>
+            <h1>Pantone <span class="accent">Matcher</span></h1>
+            <p>Upload a photo and pick a color to find its closest Pantone match.</p>
+        </header>
+        
+        <div class="workspace">
+            <div class="image-section card">
+                <div id="dropzone" class="dropzone">
+                    <input type="file" id="file-input" accept="image/png, image/jpeg, image/webp" />
+                    <div class="dropzone-content">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                        <span class="upload-text">Click or Drag an image here</span>
+                        <span class="upload-hint">Supports JPG, PNG, WEBP</span>
+                    </div>
+                </div>
+                <div class="canvas-container" id="canvas-container" style="display: none;">
+                    <canvas id="image-canvas"></canvas>
+                    <div class="lens" id="lens"></div>
+                    <button id="reset-btn" class="icon-btn" title="Upload another image">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="results-section">
+                <div class="color-card card">
+                    <div class="color-swatch-container">
+                        <div class="color-swatch" id="picked-swatch" style="background-color: #1a1a1a;"></div>
+                    </div>
+                    <div class="color-info">
+                        <h3>Picked Color</h3>
+                        <div class="value-group">
+                            <span class="label">HEX</span>
+                            <span class="value" id="picked-hex">-</span>
+                        </div>
+                        <div class="value-group">
+                            <span class="label">RGB</span>
+                            <span class="value" id="picked-rgb">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="match-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
+                </div>
+
+                <div class="color-card card pantone-card">
+                    <div id="pantone-image-container" style="display: none; text-align: center; margin-bottom: 1rem;">
+                        <img id="pantone-image" src="" alt="Pantone Chip" style="max-width: 100%; display: block; margin: 0 auto; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+                        <button id="download-btn" class="download-btn" style="margin-top: 1rem;">Download PNG</button>
+                    </div>
+                    <div class="color-swatch-container" id="pantone-swatch-container">
+                        <div class="color-swatch" id="pantone-swatch" style="background-color: #1a1a1a;"></div>
+                        <div class="pantone-strip" id="pantone-strip"></div>
+                    </div>
+                    <div class="color-info">
+                        <h3>Closest Pantone</h3>
+                        <div class="value-group main-value">
+                            <span class="value highlight-text" id="pantone-name">-</span>
+                        </div>
+                        <div class="value-group">
+                            <span class="label">HEX</span>
+                            <span class="value" id="pantone-hex">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="toast" class="toast">Color copied to clipboard!</div>
+
+    <script src="script.js"></script>
+</body>
+</html>
