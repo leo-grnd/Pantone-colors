@@ -199,3 +199,117 @@ export function sampleRegion(ctx, cx, cy, radius, width, height) {
         b: linearToSrgb(bl / count),
     };
 }
+
+// ---------------------------------------------------------------------------
+// CIELAB -> sRGB (inverse of rgbToLab), needed to render cluster centroids.
+// ---------------------------------------------------------------------------
+
+function pivotInv(f) {
+    const f3 = f * f * f;
+    return f3 > 0.008856451679 ? f3 : (f - 16 / 116) / 7.787037;
+}
+
+export function labToRgb(L, a, b) {
+    const fy = (L + 16) / 116;
+    const fx = fy + a / 500;
+    const fz = fy - b / 200;
+    const x = pivotInv(fx) * 0.95047;
+    const y = pivotInv(fy) * 1.00000;
+    const z = pivotInv(fz) * 1.08883;
+
+    // XYZ (D65) -> linear sRGB
+    const rl = x *  3.2404542 + y * -1.5371385 + z * -0.4985314;
+    const gl = x * -0.9692660 + y *  1.8760108 + z *  0.0415560;
+    const bl = x *  0.0556434 + y * -0.2040259 + z *  1.0572252;
+
+    return { r: linearToSrgb(rl), g: linearToSrgb(gl), b: linearToSrgb(bl) };
+}
+
+// ---------------------------------------------------------------------------
+// Dominant-color palette extraction (k-means in CIELAB)
+// ---------------------------------------------------------------------------
+//
+// Clustering in Lab gives perceptually meaningful groups (unlike naive RGB
+// frequency counting which yields near-duplicates). Seeding is a deterministic
+// farthest-first traversal (greedy k-means++), so the palette is stable across
+// runs and the colors are well spread. Input is a flat RGBA byte array (already
+// downscaled by the caller for speed); output is sorted by dominance.
+//
+// Returns: [{ r, g, b, hex, weight }]  (weight = fraction of sampled pixels)
+
+export function extractPalette(rgba, k = 5) {
+    const L = [], A = [], B = [];
+    for (let i = 0; i < rgba.length; i += 4) {
+        if (rgba[i + 3] < 125) continue; // skip mostly-transparent
+        const lab = rgbToLab(rgba[i], rgba[i + 1], rgba[i + 2]);
+        L.push(lab[0]); A.push(lab[1]); B.push(lab[2]);
+    }
+    const n = L.length;
+    if (!n) return [];
+    const K = Math.min(k, n);
+
+    const cL = new Array(K), cA = new Array(K), cB = new Array(K);
+    cL[0] = L[0]; cA[0] = A[0]; cB[0] = B[0];
+
+    // Farthest-first seeding (deterministic).
+    const nearest = new Float64Array(n).fill(Infinity);
+    for (let c = 1; c < K; c++) {
+        let far = 0, farD = -1;
+        for (let i = 0; i < n; i++) {
+            const dl = L[i] - cL[c - 1], da = A[i] - cA[c - 1], db = B[i] - cB[c - 1];
+            const d = dl * dl + da * da + db * db;
+            if (d < nearest[i]) nearest[i] = d;
+            if (nearest[i] > farD) { farD = nearest[i]; far = i; }
+        }
+        cL[c] = L[far]; cA[c] = A[far]; cB[c] = B[far];
+    }
+
+    // Lloyd's iterations.
+    const assign = new Int32Array(n);
+    for (let iter = 0; iter < 12; iter++) {
+        let moved = false;
+        for (let i = 0; i < n; i++) {
+            let best = 0, bestD = Infinity;
+            for (let c = 0; c < K; c++) {
+                const dl = L[i] - cL[c], da = A[i] - cA[c], db = B[i] - cB[c];
+                const d = dl * dl + da * da + db * db;
+                if (d < bestD) { bestD = d; best = c; }
+            }
+            if (assign[i] !== best) { assign[i] = best; moved = true; }
+        }
+        const sL = new Float64Array(K), sA = new Float64Array(K), sB = new Float64Array(K), cnt = new Float64Array(K);
+        for (let i = 0; i < n; i++) {
+            const c = assign[i];
+            sL[c] += L[i]; sA[c] += A[i]; sB[c] += B[i]; cnt[c]++;
+        }
+        for (let c = 0; c < K; c++) {
+            if (cnt[c]) { cL[c] = sL[c] / cnt[c]; cA[c] = sA[c] / cnt[c]; cB[c] = sB[c] / cnt[c]; }
+        }
+        if (!moved && iter > 0) break;
+    }
+
+    const counts = new Float64Array(K);
+    for (let i = 0; i < n; i++) counts[assign[i]]++;
+
+    let clusters = [];
+    for (let c = 0; c < K; c++) {
+        if (counts[c]) clusters.push({ lab: [cL[c], cA[c], cB[c]], weight: counts[c] / n });
+    }
+    clusters.sort((p, q) => q.weight - p.weight);
+
+    // Merge centroids that are perceptually near-identical (ΔE76).
+    const merged = [];
+    for (const cl of clusters) {
+        const dup = merged.find(m => {
+            const dl = m.lab[0] - cl.lab[0], da = m.lab[1] - cl.lab[1], db = m.lab[2] - cl.lab[2];
+            return Math.sqrt(dl * dl + da * da + db * db) < 4;
+        });
+        if (dup) dup.weight += cl.weight;
+        else merged.push(cl);
+    }
+
+    return merged.map(c => {
+        const rgb = labToRgb(c.lab[0], c.lab[1], c.lab[2]);
+        return { r: rgb.r, g: rgb.g, b: rgb.b, hex: rgbToHex(rgb.r, rgb.g, rgb.b), weight: c.weight };
+    });
+}

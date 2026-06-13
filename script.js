@@ -6,7 +6,7 @@
 //   pointer lock  -> load the official chip for the best match (direct -> proxy -> swatch)
 
 import {
-    rgbToHex, rgbToLab, ciede2000, sampleRegion, confidenceFromDeltaE,
+    rgbToHex, rgbToLab, ciede2000, sampleRegion, confidenceFromDeltaE, extractPalette,
 } from './color.js';
 import { loadLibraries, chipUrlDirect, chipUrlProxy } from './data.js';
 
@@ -41,7 +41,7 @@ async function init() {
         'pantone-image-container', 'pantone-image', 'chip-spinner', 'chip-badge',
         'pantone-swatch-container', 'pantone-swatch', 'pantone-strip',
         'download-btn', 'alt-matches', 'alt-list', 'toast', 'sr-live',
-        'themeToggle', 'themeIcon']);
+        'themeToggle', 'themeIcon', 'palette', 'palette-swatches']);
 
     els.ctx = els['image-canvas'].getContext('2d', { willReadFrequently: true });
     els.loupeCtx = els['loupe-canvas'].getContext('2d');
@@ -171,6 +171,71 @@ function drawToCanvas(source) {
     resetSelectionState();
     els['dropzone'].hidden = true;
     els['canvas-container'].hidden = false;
+    buildPalette();
+}
+
+// ---------------------------------------------------------------------------
+// Dominant-color palette (k-means in Lab) — rendered under the image
+// ---------------------------------------------------------------------------
+
+function buildPalette() {
+    const canvas = els['image-canvas'];
+    // Downscale into a tiny offscreen canvas: averages local detail and keeps
+    // the clustering cheap (a few thousand samples instead of millions).
+    const MAX_SIDE = 120;
+    const scale = Math.min(1, MAX_SIDE / Math.max(canvas.width, canvas.height));
+    const tw = Math.max(1, Math.round(canvas.width * scale));
+    const th = Math.max(1, Math.round(canvas.height * scale));
+    const tmp = document.createElement('canvas');
+    tmp.width = tw; tmp.height = th;
+    const tctx = tmp.getContext('2d', { willReadFrequently: true });
+    tctx.drawImage(canvas, 0, 0, tw, th);
+
+    const palette = extractPalette(tctx.getImageData(0, 0, tw, th).data, 5);
+    renderPalette(palette);
+}
+
+function renderPalette(palette) {
+    const wrap = els['palette-swatches'];
+    wrap.innerHTML = '';
+    if (!palette.length) { els['palette'].hidden = true; return; }
+
+    for (const c of palette) {
+        const pct = Math.round(c.weight * 100);
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'palette-swatch';
+        item.setAttribute('role', 'listitem');
+        item.title = `${c.hex} · ${pct}%`;
+        item.setAttribute('aria-label', `Choisir la couleur ${c.hex}, ${pct}% de l'image`);
+        item.innerHTML =
+            `<span class="palette-chip" style="background:${c.hex}"></span>` +
+            `<span class="palette-hex">${c.hex}</span>`;
+        item.addEventListener('click', () => {
+            pickColor({ r: c.r, g: c.g, b: c.b });
+            wrap.querySelectorAll('.palette-swatch').forEach(s => s.classList.remove('active'));
+            item.classList.add('active');
+        });
+        wrap.appendChild(item);
+    }
+    els['palette'].hidden = false;
+}
+
+// Select a color directly (from a palette swatch) and lock its Pantone match,
+// reusing the same rendering path as a canvas pick.
+function pickColor(rgb) {
+    lastPick = { x: -1, y: -1, rgb: { ...rgb } }; // x<0 marks a synthetic pick (no source pixel)
+    updatePickedColor(rgb);
+
+    currentMatches = topMatches(rgb);
+    if (!currentMatches.length) return;
+
+    pantoneLocked = true;
+    lockedPick = { x: -1, y: -1, rgb: { ...rgb } };
+    selectMatch(currentMatches[0], true);
+    renderAltList(currentMatches);
+    els['download-btn'].hidden = false;
+    announce(`${selectedMatch.displayName}. ${describeConfidence(selectedMatch.deltaE)}.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -192,8 +257,16 @@ function setupCanvasPicking() {
         e.preventDefault();
         schedulePreview(e);
     });
-    canvas.addEventListener('pointerup', () => lockPick());
-    canvas.addEventListener('pointerleave', () => { els['lens'].style.display = 'none'; });
+    canvas.addEventListener('pointerup', e => {
+        lockPick();
+        if (e.pointerType !== 'mouse') hideLoupe(); // touch fires no pointerleave
+    });
+    canvas.addEventListener('pointerleave', hideLoupe);
+    canvas.addEventListener('pointercancel', hideLoupe);
+}
+
+function hideLoupe() {
+    els['lens'].style.display = 'none';
 }
 
 function schedulePreview(e) {
@@ -229,12 +302,16 @@ function processPreview(e) {
     if (!rgb) return;
 
     lastPick = { x, y, rgb };
-    updatePickedColor(rgb);
     updateLoupe(e, rect, x, y);
 
+    // While a result is locked, hovering only moves the loupe — the picked-colour
+    // readout and the match stay frozen on the locked pick so they never disagree.
+    if (pantoneLocked) return;
+
+    updatePickedColor(rgb);
     currentMatches = topMatches(rgb);
-    if (currentMatches.length && !pantoneLocked) {
-        // Live: update text + alt list, but defer the network chip load to lock.
+    if (currentMatches.length) {
+        // Live preview; defer the network chip load until the user locks.
         selectMatch(currentMatches[0], false);
         renderAltList(currentMatches);
     }
@@ -244,13 +321,15 @@ function lockPick() {
     if (pendingEvent) processPreview(pendingEvent);
     if (!lastPick) return;
 
-    currentMatches = topMatches(lastPick.rgb);
-    if (!currentMatches.length) return;
+    const matches = topMatches(lastPick.rgb);
+    if (!matches.length) return;
 
     pantoneLocked = true;
     lockedPick = copyPick(lastPick);
-    selectMatch(currentMatches[0], true);
-    renderAltList(currentMatches);
+    currentMatches = matches;
+    updatePickedColor(lastPick.rgb); // keep the readout in sync with the locked pick
+    selectMatch(matches[0], true);
+    renderAltList(matches);
 
     els['download-btn'].hidden = false;
     announce(`${selectedMatch.displayName}. ${describeConfidence(selectedMatch.deltaE)}.`);
@@ -299,32 +378,22 @@ function topMatches(rgb, k = 3) {
 
 function recomputeFromLastPick(reSample) {
     const canvas = els['image-canvas'];
+    // The pick that drives the readout: the locked pick when locked, else the last hover.
+    const active = (pantoneLocked && lockedPick) ? lockedPick : lastPick;
+    if (!active) return;
 
-    if (reSample && lastPick) {
-        const rgb = sampleRegion(els.ctx, lastPick.x, lastPick.y, sampleRadius, canvas.width, canvas.height);
-        if (rgb) { lastPick.rgb = rgb; updatePickedColor(rgb); }
+    if (reSample && active.x >= 0) {
+        const rgb = sampleRegion(els.ctx, active.x, active.y, sampleRadius, canvas.width, canvas.height);
+        if (rgb) active.rgb = rgb;
     }
+    updatePickedColor(active.rgb);
 
-    if (lastPick) {
-        currentMatches = topMatches(lastPick.rgb);
-    }
-
-    if (pantoneLocked && lockedPick) {
-        if (reSample) {
-            const rgb = sampleRegion(els.ctx, lockedPick.x, lockedPick.y, sampleRadius, canvas.width, canvas.height);
-            if (rgb) lockedPick.rgb = rgb;
-        }
-
-        const lockedMatches = topMatches(lockedPick.rgb);
-        if (lockedMatches.length) {
-            selectMatch(lockedMatches[0], true);
-            renderAltList(lockedMatches);
-            els['download-btn'].hidden = false;
-        }
-    } else if (currentMatches.length) {
-        selectMatch(currentMatches[0], false);
-        renderAltList(currentMatches);
-    }
+    const matches = topMatches(active.rgb);
+    if (!matches.length) return;
+    currentMatches = matches;
+    selectMatch(matches[0], pantoneLocked);
+    renderAltList(matches);
+    if (pantoneLocked) els['download-btn'].hidden = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -596,6 +665,8 @@ function resetSelectionState() {
     els['alt-list'].innerHTML = '';
     els['alt-matches'].hidden = true;
     els['download-btn'].hidden = true;
+    els['palette'].hidden = true;
+    els['palette-swatches'].innerHTML = '';
 }
 
 function announce(message) {

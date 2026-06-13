@@ -270,13 +270,21 @@ header {
 
 @media (max-width: 900px) {
   .workspace { grid-template-columns: 1fr; }
+  .container { padding: 1.5rem 1.25rem 3rem; }
+  header { margin-bottom: 2rem; }
+  .hero { margin-bottom: 1.75rem; }
+  canvas { max-height: 60vh; }
+  .lens { width: 116px; height: 116px; }
+  .lens canvas { width: 116px; height: 116px; }
 }
 
 .image-section {
   padding: 1rem;
   display: flex;
+  flex-direction: column;
   justify-content: center;
-  align-items: center;
+  align-items: stretch;
+  gap: 1.25rem;
   min-height: 450px;
 }
 
@@ -341,6 +349,11 @@ canvas {
   max-height: 70vh;
   object-fit: contain;
   border: 1px solid var(--border);
+  touch-action: none; /* let pointer drags pick instead of scrolling the page */
+}
+
+button, .mode-option, .palette-swatch, .alt-item, .copyable {
+  -webkit-tap-highlight-color: transparent;
 }
 
 .lens {
@@ -401,6 +414,62 @@ canvas {
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
+
+/* DOMINANT PALETTE */
+.palette { width: 100%; }
+
+.palette-head {
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 0.6rem;
+}
+
+.palette-swatches {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.palette-swatch {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.palette-chip {
+  height: 48px;
+  width: 100%;
+  border: 1px solid var(--border);
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.palette-swatch:hover .palette-chip {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+}
+
+.palette-swatch.active .palette-chip {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.palette-hex {
+  font-size: 0.6rem;
+  letter-spacing: 0.03em;
+  text-align: center;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+}
+
+.palette-swatch:hover .palette-hex { color: var(--accent); }
 
 /* RESULTS */
 .results-section {
@@ -719,4 +788,66 @@ footer {
 .toast.show {
   transform: translateX(-50%) translateY(0);
   opacity: 1;
+}
+
+/* PHONE */
+@media (max-width: 560px) {
+  .container { padding: 1.25rem 1rem 2.5rem; }
+
+  header {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+  }
+  .tagline { font-size: 0.6rem; letter-spacing: 0.15em; }
+  .meta > div:first-child { font-size: 0.62rem; }
+
+  .hero { margin-bottom: 1.5rem; }
+  .hero p { font-size: 0.82rem; }
+
+  /* Panels: tighter padding, fields stacked full width */
+  .search-panel, .card { padding: 1.25rem; }
+  .search-panel { margin-bottom: 1.5rem; }
+
+  .form-grid {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1.1rem;
+  }
+  .field { width: 100%; }
+
+  .distance-mode {
+    display: flex;
+    width: 100%;
+  }
+  .distance-mode .mode-option {
+    flex: 1;
+    text-align: center;
+    padding: 0.55rem 0.35rem;
+    font-size: 0.62rem;
+    line-height: 1.25;
+    white-space: normal;       /* allow long labels (e.g. "Papier couché (C)") to wrap */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Image + picking */
+  .image-section { min-height: 0; padding: 0.85rem; gap: 1rem; }
+  .dropzone { min-height: 220px; }
+  canvas { max-height: 52vh; }
+  .lens { width: 100px; height: 100px; }
+  .lens canvas { width: 100px; height: 100px; }
+  .pick-hint { font-size: 0.58rem; padding: 0.3rem 0.6rem; }
+
+  /* Dominant palette */
+  .palette-swatches { gap: 0.35rem; }
+  .palette-chip { height: 42px; }
+  .palette-hex { font-size: 0.5rem; }
+
+  /* Results */
+  .color-card, .alt-matches { padding: 1.25rem; }
+  .highlight-text { font-size: 1.2rem; word-break: break-word; }
+  .value { font-size: 0.85rem; }
+  .color-swatch-container { height: 90px; }
+  .pantone-card .color-swatch-container { min-height: 130px; }
 }
