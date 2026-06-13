@@ -17,8 +17,8 @@ const LOUPE_ZOOM = 8;       // magnification factor of the zoom loupe
 // State
 // ---------------------------------------------------------------------------
 
-let libraries = { C: [], TCX: [] };
-let currentLibrary = 'C';
+let libraries = { C: [], TCX: [], MIXED: [] };
+let currentLibrary = 'MIXED';
 let sampleRadius = 2;       // 0 = 1px, 2 = 5×5, 5 = 11×11
 let lastPick = null;        // { x, y, rgb }  (intrinsic canvas coords)
 let lockedPick = null;      // pick currently used for the displayed Pantone result

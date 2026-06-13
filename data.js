@@ -1,9 +1,10 @@
 // data.js — loads the Pantone reference libraries and normalizes them to a
 // common shape, precomputing CIELAB for fast perceptual matching.
 //
-// Two libraries are supported:
-//   - C   : PANTONE Solid Coated (pantone.json)        e.g. "100-c"
-//   - TCX : PANTONE Fashion, Home + Interiors (TCX)     e.g. "11-0103" / "egret"
+// Three search modes are supported:
+//   - C     : PANTONE Solid Coated (pantone.json)        e.g. "100-c"
+//   - TCX   : PANTONE Fashion, Home + Interiors (TCX)     e.g. "11-0103" / "egret"
+//   - MIXED : combined C + TCX library, ranked by the same ΔE score
 //
 // Each normalized entry:
 //   { library, code, displayName, colorName, hex, r, g, b, lab }
@@ -73,5 +74,5 @@ export async function loadLibraries() {
         .map(([code, v]) => buildEntry('TCX', code, v.hex, titleCase(v.name || '')))
         .filter(Boolean);
 
-    return { C, TCX };
+    return { C, TCX, MIXED: [...C, ...TCX] };
 }
