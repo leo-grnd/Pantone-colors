@@ -157,11 +157,11 @@ function hueAngle(b, ap) {
 
 // Returns { label, level } where level is a slug used for styling.
 export function confidenceFromDeltaE(dE) {
-    if (dE < 1) return { label: 'Perfect match', level: 'perfect' };
+    if (dE < 1) return { label: 'Correspondance parfaite', level: 'perfect' };
     if (dE < 2) return { label: 'Excellent', level: 'excellent' };
-    if (dE < 5) return { label: 'Good', level: 'good' };
-    if (dE < 10) return { label: 'Fair', level: 'fair' };
-    return { label: 'Approximate', level: 'approximate' };
+    if (dE < 5) return { label: 'Bonne', level: 'good' };
+    if (dE < 10) return { label: 'Correcte', level: 'fair' };
+    return { label: 'Approximative', level: 'approximate' };
 }
 
 // ---------------------------------------------------------------------------

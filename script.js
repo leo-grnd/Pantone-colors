@@ -44,7 +44,7 @@ async function init() {
     els.loupeCtx = els['loupe-canvas'].getContext('2d');
 
     libraries = await loadLibraries();
-    console.log(`Loaded ${libraries.C.length} Coated and ${libraries.TCX.length} TCX Pantone colors`);
+    console.log(`${libraries.C.length} couleurs Pantone Couché et ${libraries.TCX.length} couleurs TCX chargées`);
 
     setupControls();
     setupUpload();
@@ -367,7 +367,7 @@ function loadChip(match) {
         if (stage === 'direct') { stage = 'proxy'; img.src = proxy; }
         else { showSwatchFallback(match); }
     };
-    img.alt = `Official Pantone color chip — ${match.displayName}`;
+    img.alt = `Pastille de couleur Pantone officielle - ${match.displayName}`;
     img.src = direct;
 }
 
@@ -393,7 +393,7 @@ function setupDownload() {
         const btn = els['download-btn'];
         const original = btn.textContent;
         btn.disabled = true;
-        btn.textContent = 'Processing…';
+        btn.textContent = 'Préparation...';
         try {
             const blobUrl = await chipPngUrl(selectedMatch);
             const a = document.createElement('a');
@@ -403,8 +403,8 @@ function setupDownload() {
             a.click();
             a.remove();
         } catch (err) {
-            console.error('Download failed:', err);
-            alert('Could not prepare the image for download.');
+            console.error('Échec du téléchargement :', err);
+            alert("Impossible de préparer l'image pour le téléchargement.");
         } finally {
             btn.disabled = false;
             btn.textContent = original;
@@ -479,7 +479,7 @@ async function copyText(text) {
     } catch {
         legacyCopy(text);
     }
-    showToast('Copied to clipboard!');
+    showToast('Copié dans le presse-papiers !');
 }
 
 function legacyCopy(text) {
