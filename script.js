@@ -46,7 +46,7 @@ async function init() {
     els.loupeCtx = els['loupe-canvas'].getContext('2d');
 
     libraries = await loadLibraries();
-    console.log(`${libraries.C.length} couleurs Pantone Couché et ${libraries.TCX.length} couleurs TCX chargées`);
+    console.log(`${libraries.C.length} couleurs Pantone Papier couché et ${libraries.TCX.length} couleurs Textile TCX chargées`);
 
     setupControls();
     setupUpload();
