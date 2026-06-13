@@ -1,283 +1,516 @@
-let pantoneData = null;
-let parsedPantones = [];
+// script.js — main application logic for the Pantone Matcher.
+//
+// Picking pipeline:
+//   pointer move  -> sample an N×N region (linear-light average) -> sRGB color
+//                 -> CIEDE2000 against the active library -> top-3 matches
+//   pointer lock  -> load the official chip for the best match (direct -> proxy -> swatch)
 
-async function loadPantoneData() {
-    try {
-        const response = await fetch('pantone.json');
-        pantoneData = await response.json();
-        
-        // Pre-parse hex to rgb for faster distance calculation
-        for (const item of pantoneData) {
-            const hex = item.hex;
-            const rgb = hexToRgb(hex);
-            if (rgb) {
-                parsedPantones.push({
-                    name: formatPantoneName(item.pantone),
-                    code: item.pantone,
-                    hex: hex,
-                    r: rgb.r,
-                    g: rgb.g,
-                    b: rgb.b
-                });
-            }
-        }
-        console.log(`Loaded ${parsedPantones.length} Pantone colors`);
-    } catch (e) {
-        console.error("Failed to load Pantone data", e);
-    }
+import {
+    rgbToHex, rgbToLab, ciede2000, sampleRegion, confidenceFromDeltaE,
+} from './color.js';
+import { loadLibraries, chipUrlDirect, chipUrlProxy } from './data.js';
+
+const MAX_DIM = 4096;       // cap the canvas backing store to bound memory
+const LOUPE_ZOOM = 8;       // magnification factor of the zoom loupe
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+
+let libraries = { C: [], TCX: [] };
+let currentLibrary = 'C';
+let sampleRadius = 2;       // 0 = 1px, 2 = 5×5, 5 = 11×11
+let lastPick = null;        // { x, y, rgb }  (intrinsic canvas coords)
+let currentMatches = [];
+let selectedMatch = null;
+let downloadProxyUrl = null; // proxy URL of the currently displayed official chip (for download)
+
+// ---------------------------------------------------------------------------
+// Boot
+// ---------------------------------------------------------------------------
+
+const els = {};
+document.addEventListener('DOMContentLoaded', init);
+
+async function init() {
+    cache(['dropzone', 'file-input', 'canvas-container', 'image-canvas', 'lens', 'loupe-canvas',
+        'reset-btn', 'pick-hint', 'picked-hex', 'picked-rgb', 'picked-swatch',
+        'pantone-name', 'pantone-colorname', 'pantone-hex', 'pantone-confidence',
+        'pantone-image-container', 'pantone-image', 'chip-spinner', 'chip-badge',
+        'pantone-swatch-container', 'pantone-swatch', 'pantone-strip',
+        'download-btn', 'alt-matches', 'alt-list', 'toast', 'sr-live']);
+
+    els.ctx = els['image-canvas'].getContext('2d', { willReadFrequently: true });
+    els.loupeCtx = els['loupe-canvas'].getContext('2d');
+
+    libraries = await loadLibraries();
+    console.log(`Loaded ${libraries.C.length} Coated and ${libraries.TCX.length} TCX Pantone colors`);
+
+    setupControls();
+    setupUpload();
+    setupCanvasPicking();
+    setupClipboard();
+    setupDownload();
 }
 
-function hexToRgb(hex) {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-        r: parseInt(result[1], 16),
-        g: parseInt(result[2], 16),
-        b: parseInt(result[3], 16)
-    } : null;
+function cache(ids) {
+    for (const id of ids) els[id] = document.getElementById(id);
 }
 
-function rgbToHex(r, g, b) {
-    return "#" + (1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1).toUpperCase();
-}
+// ---------------------------------------------------------------------------
+// Controls (library + sample size)
+// ---------------------------------------------------------------------------
 
-function formatPantoneName(code) {
-    return code.split('-').map(word => word.toUpperCase()).join(' ');
-}
-
-// Color distance (Weighted RGB for better human perception approximation)
-function getColorDistance(r1, g1, b1, r2, g2, b2) {
-    const rmean = (r1 + r2) / 2;
-    const r = r1 - r2;
-    const g = g1 - g2;
-    const b = b1 - b2;
-    return Math.sqrt((((512+rmean)*r*r)>>8) + 4*g*g + (((767-rmean)*b*b)>>8));
-}
-
-function findClosestPantone(r, g, b) {
-    if (!parsedPantones.length) return null;
-    
-    let minDistance = Infinity;
-    let closest = null;
-    
-    for (const p of parsedPantones) {
-        const dist = getColorDistance(r, g, b, p.r, p.g, p.b);
-        if (dist < minDistance) {
-            minDistance = dist;
-            closest = p;
-        }
-    }
-    return closest;
-}
-
-// UI Interaction
-document.addEventListener('DOMContentLoaded', () => {
-    loadPantoneData();
-    
-    const dropzone = document.getElementById('dropzone');
-    const fileInput = document.getElementById('file-input');
-    const canvasContainer = document.getElementById('canvas-container');
-    const canvas = document.getElementById('image-canvas');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    const lens = document.getElementById('lens');
-    const resetBtn = document.getElementById('reset-btn');
-    
-    // UI Elements
-    const pickedHex = document.getElementById('picked-hex');
-    const pickedRgb = document.getElementById('picked-rgb');
-    const pickedSwatch = document.getElementById('picked-swatch');
-    
-    const pantoneName = document.getElementById('pantone-name');
-    const pantoneHex = document.getElementById('pantone-hex');
-    const pantoneSwatch = document.getElementById('pantone-swatch');
-    
-    // Setup File Upload
-    fileInput.addEventListener('change', handleFileSelect);
-    
-    dropzone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropzone.classList.add('dragover');
-    });
-    
-    dropzone.addEventListener('dragleave', () => {
-        dropzone.classList.remove('dragover');
-    });
-    
-    dropzone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropzone.classList.remove('dragover');
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            fileInput.files = e.dataTransfer.files;
-            handleFileSelect({ target: fileInput });
-        }
-    });
-    
-    resetBtn.addEventListener('click', () => {
-        dropzone.style.display = 'flex';
-        canvasContainer.style.display = 'none';
-        fileInput.value = '';
-    });
-    
-    function handleFileSelect(e) {
-        const file = e.target.files[0];
-        if (!file) return;
-        
-        const reader = new FileReader();
-        reader.onload = function(event) {
-            const img = new Image();
-            img.onload = function() {
-                // Set actual canvas size to match image intrinsic dimensions for exact pixel mapping
-                canvas.width = img.width;
-                canvas.height = img.height;
-                ctx.drawImage(img, 0, 0);
-                
-                dropzone.style.display = 'none';
-                canvasContainer.style.display = 'flex';
-            }
-            img.src = event.target.result;
-        }
-        reader.readAsDataURL(file);
-    }
-    
-    // Canvas interaction
-    canvas.addEventListener('mousemove', (e) => {
-        const rect = canvas.getBoundingClientRect();
-        
-        // Update lens position (visual overlay)
-        lens.style.display = 'block';
-        lens.style.left = `${e.clientX - rect.left}px`;
-        lens.style.top = `${e.clientY - rect.top}px`;
-        
-        // We could also dynamically update color while hovering, but let's just use click to lock
-        const scaleX = canvas.width / rect.width;
-        const scaleY = canvas.height / rect.height;
-        const x = Math.floor((e.clientX - rect.left) * scaleX);
-        const y = Math.floor((e.clientY - rect.top) * scaleY);
-        
-        // Ensure coordinates are within bounds
-        if (x >= 0 && x < canvas.width && y >= 0 && y < canvas.height) {
-            const pixel = ctx.getImageData(x, y, 1, 1).data;
-            lens.style.backgroundColor = `rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`;
-            lens.style.borderColor = (pixel[0] + pixel[1] + pixel[2] > 382) ? '#000' : '#fff';
-        }
-    });
-    
-    canvas.addEventListener('mouseleave', () => {
-        lens.style.display = 'none';
-    });
-    
-    canvas.addEventListener('click', (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const scaleX = canvas.width / rect.width;
-        const scaleY = canvas.height / rect.height;
-        
-        const x = Math.floor((e.clientX - rect.left) * scaleX);
-        const y = Math.floor((e.clientY - rect.top) * scaleY);
-        
-        if (x >= 0 && x < canvas.width && y >= 0 && y < canvas.height) {
-            const pixel = ctx.getImageData(x, y, 1, 1).data;
-            const r = pixel[0], g = pixel[1], b = pixel[2];
-            
-            updatePickedColor(r, g, b);
-            
-            const pantone = findClosestPantone(r, g, b);
-            if (pantone) {
-                updatePantoneUI(pantone);
-            }
-        }
-    });
-    
-    function updatePickedColor(r, g, b) {
-        const hex = rgbToHex(r, g, b);
-        pickedHex.textContent = hex;
-        pickedRgb.textContent = `rgb(${r}, ${g}, ${b})`;
-        pickedSwatch.style.backgroundColor = hex;
-    }
-    
-    function updatePantoneUI(pantone) {
-        pantoneName.textContent = "PANTONE " + pantone.name;
-        pantoneHex.textContent = pantone.hex.toUpperCase();
-        
-        const chipUrl = `https://www.pantone.com/media/color-finder/img/chips/pantone-color-chip-${pantone.code}.webp`;
-        
-        const pantoneImageContainer = document.getElementById('pantone-image-container');
-        const pantoneImage = document.getElementById('pantone-image');
-        const pantoneSwatchContainer = document.getElementById('pantone-swatch-container');
-        const downloadBtn = document.getElementById('download-btn');
-        
-        // Error handling for image load
-        pantoneImage.onerror = () => {
-            pantoneImageContainer.style.display = 'none';
-            pantoneSwatchContainer.style.display = 'flex';
-            document.getElementById('pantone-swatch').style.backgroundColor = pantone.hex;
-        };
-
-        pantoneImage.onload = () => {
-            pantoneImageContainer.style.display = 'block';
-            pantoneSwatchContainer.style.display = 'none';
-        };
-
-        const chipUrlPath = `www.pantone.com/media/color-finder/img/chips/pantone-color-chip-${pantone.code}.webp`;
-        const proxyUrl = `https://wsrv.nl/?url=${chipUrlPath}`;
-        
-        pantoneImage.src = proxyUrl;
-        
-        // Setup download button
-        downloadBtn.onclick = async () => {
-            try {
-                downloadBtn.disabled = true;
-                downloadBtn.textContent = 'Processing...';
-                
-                const response = await fetch(proxyUrl);
-                const blob = await response.blob();
-                
-                // Convert blob to object URL
-                const blobUrl = URL.createObjectURL(blob);
-                
-                // Create an off-screen image to draw on canvas
-                const img = new Image();
-                img.onload = () => {
-                    const canvas = document.createElement('canvas');
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0);
-                    
-                    // Convert to PNG and download
-                    const pngUrl = canvas.toDataURL('image/png');
-                    const a = document.createElement('a');
-                    a.href = pngUrl;
-                    a.download = `pantone-${pantone.code}.png`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    
-                    URL.revokeObjectURL(blobUrl);
-                    downloadBtn.disabled = false;
-                    downloadBtn.textContent = 'Download PNG';
-                };
-                img.src = blobUrl;
-            } catch (err) {
-                console.error('Failed to download image:', err);
-                alert('Failed to download image. The Pantone server might be blocking requests.');
-                downloadBtn.disabled = false;
-                downloadBtn.textContent = 'Download PNG';
-            }
-        };
-    }
-    
-    // Copy to clipboard features
-    [pickedHex, pickedRgb, pantoneName, pantoneHex].forEach(el => {
-        el.addEventListener('click', () => {
-            if (el.textContent === '-') return;
-            navigator.clipboard.writeText(el.textContent).then(() => {
-                showToast();
-            });
+function setupControls() {
+    document.querySelectorAll('input[name="library"]').forEach(r => {
+        r.addEventListener('change', () => {
+            currentLibrary = r.value;
+            recomputeFromLastPick(false);
         });
     });
-    
-    function showToast() {
-        const toast = document.getElementById('toast');
-        toast.classList.add('show');
-        setTimeout(() => toast.classList.remove('show'), 2000);
+    document.querySelectorAll('input[name="sample"]').forEach(r => {
+        r.addEventListener('change', () => {
+            sampleRadius = parseInt(r.value, 10);
+            recomputeFromLastPick(true);
+            if (lastPick) refreshLoupeFromLastEvent();
+        });
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Upload / drag & drop / reset
+// ---------------------------------------------------------------------------
+
+function setupUpload() {
+    els['file-input'].addEventListener('change', e => {
+        if (e.target.files && e.target.files[0]) loadImageFile(e.target.files[0]);
+    });
+
+    const dz = els['dropzone'];
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+    dz.addEventListener('drop', e => {
+        e.preventDefault();
+        dz.classList.remove('dragover');
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) loadImageFile(e.dataTransfer.files[0]);
+    });
+
+    els['reset-btn'].addEventListener('click', () => {
+        els['dropzone'].hidden = false;
+        els['canvas-container'].hidden = true;
+        els['file-input'].value = '';
+        lastPick = null;
+    });
+}
+
+async function loadImageFile(file) {
+    if (!file.type.startsWith('image/')) return;
+    let source;
+    try {
+        // createImageBitmap honours EXIF orientation so rotated photos sample correctly.
+        source = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    } catch {
+        source = await loadViaImgElement(file); // fallback for older browsers
     }
-});
+    drawToCanvas(source);
+}
+
+function loadViaImgElement(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = ev => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = reject;
+            img.src = ev.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+function drawToCanvas(source) {
+    const iw = source.width, ih = source.height;
+    const longest = Math.max(iw, ih);
+    const scale = longest > MAX_DIM ? MAX_DIM / longest : 1;
+    const w = Math.max(1, Math.round(iw * scale));
+    const h = Math.max(1, Math.round(ih * scale));
+
+    const canvas = els['image-canvas'];
+    canvas.width = w;
+    canvas.height = h;
+    els.ctx.clearRect(0, 0, w, h);
+    els.ctx.drawImage(source, 0, 0, w, h);
+    if (typeof source.close === 'function') source.close(); // free the ImageBitmap
+
+    els['dropzone'].hidden = true;
+    els['canvas-container'].hidden = false;
+}
+
+// ---------------------------------------------------------------------------
+// Canvas picking (pointer + touch) and zoom loupe
+// ---------------------------------------------------------------------------
+
+let pendingEvent = null;
+let rafScheduled = false;
+
+function setupCanvasPicking() {
+    const canvas = els['image-canvas'];
+
+    canvas.addEventListener('pointermove', e => {
+        // On touch, only preview while the finger is down; mouse always previews on hover.
+        if (e.pointerType !== 'mouse' && e.buttons === 0) return;
+        schedulePreview(e);
+    });
+    canvas.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        schedulePreview(e);
+    });
+    canvas.addEventListener('pointerup', () => lockPick());
+    canvas.addEventListener('pointerleave', () => { els['lens'].style.display = 'none'; });
+}
+
+function schedulePreview(e) {
+    pendingEvent = e;
+    if (rafScheduled) return;
+    rafScheduled = true;
+    requestAnimationFrame(() => {
+        rafScheduled = false;
+        if (pendingEvent) processPreview(pendingEvent);
+    });
+}
+
+function refreshLoupeFromLastEvent() {
+    if (pendingEvent) processPreview(pendingEvent);
+}
+
+function eventToCanvasCoords(e) {
+    const canvas = els['image-canvas'];
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = Math.floor((e.clientX - rect.left) * scaleX);
+    const y = Math.floor((e.clientY - rect.top) * scaleY);
+    return { x, y, rect };
+}
+
+function processPreview(e) {
+    const canvas = els['image-canvas'];
+    const { x, y, rect } = eventToCanvasCoords(e);
+    if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) return;
+
+    const rgb = sampleRegion(els.ctx, x, y, sampleRadius, canvas.width, canvas.height);
+    if (!rgb) return;
+
+    lastPick = { x, y, rgb };
+    updatePickedColor(rgb);
+    updateLoupe(e, rect, x, y);
+
+    currentMatches = topMatches(rgb);
+    if (currentMatches.length) {
+        // Live: update text + alt list, but defer the network chip load to lock.
+        selectMatch(currentMatches[0], false);
+        renderAltList(currentMatches);
+    }
+}
+
+function lockPick() {
+    if (!selectedMatch) return;
+    loadChip(selectedMatch);
+    els['download-btn'].hidden = false;
+    announce(`${selectedMatch.displayName}. ${describeConfidence(selectedMatch.deltaE)}.`);
+}
+
+function updateLoupe(e, rect, cx, cy) {
+    const lens = els['lens'];
+    lens.style.display = 'block';
+    // Position the loupe relative to its container (the canvas may be centered within it).
+    const containerRect = els['canvas-container'].getBoundingClientRect();
+    lens.style.left = `${e.clientX - containerRect.left}px`;
+    lens.style.top = `${e.clientY - containerRect.top}px`;
+
+    const canvas = els['image-canvas'];
+    const lctx = els.loupeCtx;
+    const size = els['loupe-canvas'].width;          // square loupe (px)
+    const srcSpan = size / LOUPE_ZOOM;               // source pixels shown
+
+    lctx.imageSmoothingEnabled = false;
+    lctx.clearRect(0, 0, size, size);
+    lctx.drawImage(canvas, cx - srcSpan / 2, cy - srcSpan / 2, srcSpan, srcSpan, 0, 0, size, size);
+
+    // Highlight the exact sampled region (2*radius+1 source px) at the center.
+    const sampleSpan = (2 * sampleRadius + 1) * LOUPE_ZOOM;
+    const o = (size - sampleSpan) / 2;
+    lctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    lctx.lineWidth = 3;
+    lctx.strokeRect(o, o, sampleSpan, sampleSpan);
+    lctx.strokeStyle = 'rgba(255,255,255,0.95)';
+    lctx.lineWidth = 1;
+    lctx.strokeRect(o, o, sampleSpan, sampleSpan);
+}
+
+// ---------------------------------------------------------------------------
+// Matching
+// ---------------------------------------------------------------------------
+
+function topMatches(rgb, k = 3) {
+    const lib = libraries[currentLibrary] || [];
+    if (!lib.length) return [];
+    const lab = rgbToLab(rgb.r, rgb.g, rgb.b);
+    const scored = lib.map(p => ({ p, dE: ciede2000(lab, p.lab) }));
+    scored.sort((a, b) => a.dE - b.dE);
+    return scored.slice(0, k).map(s => ({ ...s.p, deltaE: s.dE }));
+}
+
+function recomputeFromLastPick(reSample) {
+    if (!lastPick) return;
+    const canvas = els['image-canvas'];
+    if (reSample) {
+        const rgb = sampleRegion(els.ctx, lastPick.x, lastPick.y, sampleRadius, canvas.width, canvas.height);
+        if (rgb) { lastPick.rgb = rgb; updatePickedColor(rgb); }
+    }
+    currentMatches = topMatches(lastPick.rgb);
+    if (currentMatches.length) {
+        selectMatch(currentMatches[0], true);
+        renderAltList(currentMatches);
+        els['download-btn'].hidden = false;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+
+function updatePickedColor(rgb) {
+    const hex = rgbToHex(rgb.r, rgb.g, rgb.b);
+    els['picked-hex'].textContent = hex;
+    els['picked-rgb'].textContent = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+    els['picked-swatch'].style.backgroundColor = hex;
+}
+
+function selectMatch(match, loadChipImage) {
+    selectedMatch = match;
+    els['pantone-name'].textContent = match.displayName;
+    els['pantone-hex'].textContent = match.hex;
+
+    if (match.colorName) {
+        els['pantone-colorname'].textContent = match.colorName;
+        els['pantone-colorname'].hidden = false;
+    } else {
+        els['pantone-colorname'].hidden = true;
+    }
+
+    const conf = confidenceFromDeltaE(match.deltaE);
+    const confEl = els['pantone-confidence'];
+    confEl.textContent = `${conf.label} · ΔE ${match.deltaE.toFixed(1)}`;
+    confEl.className = `value confidence conf-${conf.level}`;
+
+    // highlight the selected row in the alt list
+    els['alt-list'].querySelectorAll('.alt-item').forEach(li => {
+        li.classList.toggle('selected', li.dataset.code === match.code && li.dataset.lib === match.library);
+    });
+
+    if (loadChipImage) loadChip(match);
+    else showSwatchFallback(match, /*quiet=*/true);
+}
+
+function renderAltList(matches) {
+    const list = els['alt-list'];
+    list.innerHTML = '';
+    for (const m of matches) {
+        const conf = confidenceFromDeltaE(m.deltaE);
+        const li = document.createElement('li');
+        li.className = 'alt-item';
+        li.dataset.code = m.code;
+        li.dataset.lib = m.library;
+        if (selectedMatch && m.code === selectedMatch.code && m.library === selectedMatch.library) {
+            li.classList.add('selected');
+        }
+        li.innerHTML = `
+            <span class="alt-swatch" style="background-color:${m.hex}"></span>
+            <span class="alt-info">
+                <span class="alt-name">${m.displayName}</span>
+                ${m.colorName ? `<span class="alt-sub">${m.colorName}</span>` : ''}
+            </span>
+            <span class="alt-de conf-${conf.level}">ΔE ${m.deltaE.toFixed(1)}<span class="alt-conf">${conf.label}</span></span>`;
+        li.addEventListener('click', () => { selectMatch(m, true); els['download-btn'].hidden = false; });
+        list.appendChild(li);
+    }
+    els['alt-matches'].hidden = matches.length === 0;
+}
+
+// ---------------------------------------------------------------------------
+// Official chip image — direct (pantone.com) -> proxy (wsrv.nl) -> swatch
+// ---------------------------------------------------------------------------
+
+function loadChip(match) {
+    const img = els['pantone-image'];
+    const direct = chipUrlDirect(match.library, match.code);
+    const proxy = chipUrlProxy(match.library, match.code);
+    downloadProxyUrl = proxy;
+
+    let stage = 'direct';
+    els['pantone-image-container'].hidden = false;
+    els['pantone-swatch-container'].hidden = true;
+    els['chip-spinner'].hidden = false;
+    els['chip-badge'].hidden = true;
+    img.style.opacity = '0';
+
+    img.onload = () => {
+        // Guard against a stale async load after the user moved to another color.
+        if (selectedMatch !== match) return;
+        els['chip-spinner'].hidden = true;
+        img.style.opacity = '1';
+    };
+    img.onerror = () => {
+        if (selectedMatch !== match) return;
+        if (stage === 'direct') { stage = 'proxy'; img.src = proxy; }
+        else { showSwatchFallback(match); }
+    };
+    img.alt = `Official Pantone color chip — ${match.displayName}`;
+    img.src = direct;
+}
+
+// Flat swatch styled like a chip, used when no official image is available.
+function showSwatchFallback(match, quiet) {
+    if (!quiet) downloadProxyUrl = null; // no official image to download
+    els['pantone-image-container'].hidden = true;
+    els['chip-spinner'].hidden = true;
+    els['pantone-swatch-container'].hidden = false;
+    els['pantone-swatch'].style.backgroundColor = match.hex;
+    const strip = els['pantone-strip'];
+    strip.hidden = false;
+    strip.textContent = match.displayName.replace(/^PANTONE\s*/i, '');
+}
+
+// ---------------------------------------------------------------------------
+// Download — official chip as PNG, or a generated chip-style PNG as fallback
+// ---------------------------------------------------------------------------
+
+function setupDownload() {
+    els['download-btn'].addEventListener('click', async () => {
+        if (!selectedMatch) return;
+        const btn = els['download-btn'];
+        const original = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Processing…';
+        try {
+            const blobUrl = await chipPngUrl(selectedMatch);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = `pantone-${selectedMatch.code}${selectedMatch.library === 'TCX' ? '-tcx' : ''}.png`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        } catch (err) {
+            console.error('Download failed:', err);
+            alert('Could not prepare the image for download.');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = original;
+        }
+    });
+}
+
+async function chipPngUrl(match) {
+    // Prefer the official chip (fetched via proxy so we can read it into a canvas).
+    if (downloadProxyUrl) {
+        try {
+            const resp = await fetch(downloadProxyUrl);
+            if (resp.ok) {
+                const blob = await resp.blob();
+                const bmp = await createImageBitmap(blob);
+                const c = document.createElement('canvas');
+                c.width = bmp.width; c.height = bmp.height;
+                c.getContext('2d').drawImage(bmp, 0, 0);
+                return c.toDataURL('image/png');
+            }
+        } catch { /* fall through to generated chip */ }
+    }
+    return generatedChipDataUrl(match);
+}
+
+// Render a Pantone-style chip locally (clearly an approximation, used only as a fallback).
+function generatedChipDataUrl(match) {
+    const W = 440, H = 650, strip = 150;
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const x = c.getContext('2d');
+    x.fillStyle = match.hex;
+    x.fillRect(0, 0, W, H - strip);
+    x.fillStyle = '#fff';
+    x.fillRect(0, H - strip, W, strip);
+    x.fillStyle = '#000';
+    x.font = '800 34px Inter, Arial, sans-serif';
+    x.fillText('PANTONE®', 30, H - strip + 56);
+    x.font = '400 30px Inter, Arial, sans-serif';
+    x.fillStyle = '#333';
+    x.fillText(match.displayName.replace(/^PANTONE\s*/i, ''), 30, H - strip + 100);
+    return c.toDataURL('image/png');
+}
+
+// ---------------------------------------------------------------------------
+// Clipboard (with non-secure-context fallback)
+// ---------------------------------------------------------------------------
+
+function setupClipboard() {
+    const copyables = [els['picked-hex'], els['picked-rgb'], els['pantone-name'], els['pantone-hex']];
+    for (const el of copyables) {
+        el.addEventListener('click', () => copyFrom(el));
+        el.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); copyFrom(el); }
+        });
+    }
+}
+
+function copyFrom(el) {
+    const text = el.textContent;
+    if (!text || text === '-') return;
+    copyText(text);
+}
+
+async function copyText(text) {
+    try {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            legacyCopy(text);
+        }
+    } catch {
+        legacyCopy(text);
+    }
+    showToast('Copied to clipboard!');
+}
+
+function legacyCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try { document.execCommand('copy'); } catch { /* ignore */ }
+    ta.remove();
+}
+
+// ---------------------------------------------------------------------------
+// Misc UI helpers
+// ---------------------------------------------------------------------------
+
+function showToast(message) {
+    const toast = els['toast'];
+    toast.textContent = message;
+    toast.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
+function announce(message) {
+    els['sr-live'].textContent = message;
+}
+
+function describeConfidence(dE) {
+    const conf = confidenceFromDeltaE(dE);
+    return `${conf.label}, delta E ${dE.toFixed(1)}`;
+}

@@ -4,39 +4,61 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pantone Matcher | Find Pantone colors from your photos</title>
-    <meta name="description" content="Upload a photo, pick a color, and instantly find its closest Pantone color match. A beautiful and modern tool for designers.">
+    <meta name="description" content="Upload a photo, pick a color, and instantly find its closest Pantone color match using perceptual CIEDE2000 color science. A beautiful, modern tool for designers.">
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="app-background"></div>
     <main class="container">
         <header>
             <h1>Pantone <span class="accent">Matcher</span></h1>
-            <p>Upload a photo and pick a color to find its closest Pantone match.</p>
+            <p>Upload a photo and pick a color to find its closest Pantone match — using perceptual <abbr title="The CIE industry-standard perceptual color-difference metric">CIEDE2000</abbr> color science.</p>
         </header>
-        
+
+        <!-- Toolbar -->
+        <div class="toolbar" role="region" aria-label="Matching options">
+            <div class="control-group">
+                <span class="control-label" id="lib-label">Library</span>
+                <div class="segmented" role="radiogroup" aria-labelledby="lib-label">
+                    <label class="seg"><input type="radio" name="library" value="C" checked><span>Coated</span></label>
+                    <label class="seg"><input type="radio" name="library" value="TCX"><span>Fashion (TCX)</span></label>
+                </div>
+            </div>
+            <div class="control-group">
+                <span class="control-label" id="sample-label">Sample area</span>
+                <div class="segmented" role="radiogroup" aria-labelledby="sample-label">
+                    <label class="seg"><input type="radio" name="sample" value="0"><span>1px</span></label>
+                    <label class="seg"><input type="radio" name="sample" value="2" checked><span>5×5</span></label>
+                    <label class="seg"><input type="radio" name="sample" value="5"><span>11×11</span></label>
+                </div>
+            </div>
+        </div>
+
         <div class="workspace">
             <div class="image-section card">
                 <div id="dropzone" class="dropzone">
-                    <input type="file" id="file-input" accept="image/png, image/jpeg, image/webp" />
+                    <input type="file" id="file-input" accept="image/png, image/jpeg, image/webp" aria-label="Upload an image">
                     <div class="dropzone-content">
                         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                        <span class="upload-text">Click or Drag an image here</span>
+                        <span class="upload-text">Click or drag an image here</span>
                         <span class="upload-hint">Supports JPG, PNG, WEBP</span>
                     </div>
                 </div>
-                <div class="canvas-container" id="canvas-container" style="display: none;">
-                    <canvas id="image-canvas"></canvas>
-                    <div class="lens" id="lens"></div>
-                    <button id="reset-btn" class="icon-btn" title="Upload another image">
+                <div class="canvas-container" id="canvas-container" hidden>
+                    <canvas id="image-canvas" role="img" aria-label="Uploaded image. Move the pointer to preview a color, click to lock the match." tabindex="0"></canvas>
+                    <div class="lens" id="lens" aria-hidden="true">
+                        <canvas id="loupe-canvas" width="140" height="140"></canvas>
+                    </div>
+                    <button id="reset-btn" class="icon-btn" title="Upload another image" aria-label="Upload another image">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                     </button>
+                    <div class="pick-hint" id="pick-hint">Move to preview · click to lock</div>
                 </div>
             </div>
-            
+
             <div class="results-section">
                 <div class="color-card card">
                     <div class="color-swatch-container">
@@ -46,45 +68,63 @@
                         <h3>Picked Color</h3>
                         <div class="value-group">
                             <span class="label">HEX</span>
-                            <span class="value" id="picked-hex">-</span>
+                            <span class="value copyable" id="picked-hex" role="button" tabindex="0" title="Click to copy">-</span>
                         </div>
                         <div class="value-group">
                             <span class="label">RGB</span>
-                            <span class="value" id="picked-rgb">-</span>
+                            <span class="value copyable" id="picked-rgb" role="button" tabindex="0" title="Click to copy">-</span>
                         </div>
                     </div>
                 </div>
 
-                <div class="match-icon">
+                <div class="match-icon" aria-hidden="true">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
                 </div>
 
                 <div class="color-card card pantone-card">
-                    <div id="pantone-image-container" style="display: none; text-align: center; margin-bottom: 1rem;">
-                        <img id="pantone-image" src="" alt="Pantone Chip" style="max-width: 100%; display: block; margin: 0 auto; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
-                        <button id="download-btn" class="download-btn" style="margin-top: 1rem;">Download PNG</button>
+                    <div id="pantone-image-container" class="chip-frame" hidden>
+                        <div class="chip-spinner" id="chip-spinner" hidden></div>
+                        <img id="pantone-image" src="" alt="Official Pantone color chip">
+                        <span class="chip-badge" id="chip-badge" hidden>Approximation</span>
                     </div>
                     <div class="color-swatch-container" id="pantone-swatch-container">
                         <div class="color-swatch" id="pantone-swatch" style="background-color: #1a1a1a;"></div>
-                        <div class="pantone-strip" id="pantone-strip"></div>
+                        <div class="pantone-strip" id="pantone-strip" hidden></div>
                     </div>
                     <div class="color-info">
                         <h3>Closest Pantone</h3>
                         <div class="value-group main-value">
-                            <span class="value highlight-text" id="pantone-name">-</span>
+                            <span class="value highlight-text copyable" id="pantone-name" role="button" tabindex="0" title="Click to copy">-</span>
                         </div>
+                        <div class="pantone-colorname" id="pantone-colorname" hidden></div>
                         <div class="value-group">
                             <span class="label">HEX</span>
-                            <span class="value" id="pantone-hex">-</span>
+                            <span class="value copyable" id="pantone-hex" role="button" tabindex="0" title="Click to copy">-</span>
                         </div>
+                        <div class="value-group">
+                            <span class="label">Confidence</span>
+                            <span class="value confidence" id="pantone-confidence">-</span>
+                        </div>
+                        <button id="download-btn" class="download-btn" hidden>Download PNG</button>
                     </div>
+                </div>
+
+                <div class="alt-matches card" id="alt-matches" hidden>
+                    <h3>Other close matches</h3>
+                    <ul id="alt-list" class="alt-list"></ul>
                 </div>
             </div>
         </div>
+
+        <footer class="app-footer">
+            <p>Matches use perceptual ΔE (CIEDE2000). Chips are fetched from the official Pantone Color Finder.
+               On-screen hex values are sRGB approximations of physical Pantone inks and may differ from a printed swatch.</p>
+        </footer>
     </main>
 
-    <div id="toast" class="toast">Color copied to clipboard!</div>
+    <div id="toast" class="toast" role="status" aria-live="polite">Copied to clipboard!</div>
+    <div id="sr-live" class="visually-hidden" aria-live="polite"></div>
 
-    <script src="script.js"></script>
+    <script type="module" src="script.js"></script>
 </body>
 </html>

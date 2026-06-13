@@ -176,16 +176,24 @@ canvas {
 
 .lens {
     position: absolute;
-    width: 60px;
-    height: 60px;
+    width: 140px;
+    height: 140px;
     border-radius: 50%;
     border: 3px solid white;
-    box-shadow: 0 0 0 1px rgba(0,0,0,0.2), 0 4px 12px rgba(0,0,0,0.4);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.5);
     pointer-events: none;
     display: none;
-    transform: translate(-50%, -50%);
+    overflow: hidden;
+    /* float the loupe just above the pointer so it never hides the target */
+    transform: translate(-50%, -100%) translateY(-18px);
     z-index: 20;
-    background-color: transparent;
+    background-color: #1a1a1a;
+}
+
+.lens canvas {
+    display: block;
+    width: 140px;
+    height: 140px;
 }
 
 .icon-btn {
@@ -262,14 +270,18 @@ canvas {
 }
 
 .pantone-strip {
-    height: 30px;
+    height: 44px;
     background: white;
     width: 100%;
     position: absolute;
     bottom: 0;
     display: flex;
     align-items: center;
+    justify-content: space-between;
     padding: 0 1rem;
+    color: #000;
+    font-weight: 600;
+    font-size: 0.85rem;
 }
 
 /* Pantone logo imitation strip */
@@ -372,20 +384,317 @@ canvas {
     background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
     color: white;
     border: none;
-    padding: 0.5rem 1.5rem;
+    padding: 0.6rem 1.5rem;
     border-radius: 30px;
     font-weight: 600;
     cursor: pointer;
     transition: var(--transition);
     font-family: 'Inter', sans-serif;
     font-size: 0.9rem;
+    width: 100%;
+    margin-top: 1.25rem;
 }
 .download-btn:hover {
-    transform: scale(1.05);
+    transform: translateY(-2px);
     box-shadow: 0 5px 15px rgba(99, 102, 241, 0.4);
 }
 .download-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     transform: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Utilities                                                          */
+/* ------------------------------------------------------------------ */
+
+[hidden] { display: none !important; }
+
+.visually-hidden {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+abbr {
+    text-decoration: underline dotted;
+    cursor: help;
+}
+
+/* ------------------------------------------------------------------ */
+/* Toolbar + segmented controls                                       */
+/* ------------------------------------------------------------------ */
+
+.toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2rem;
+    justify-content: center;
+    margin-top: -1rem;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.control-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.segmented {
+    display: inline-flex;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 999px;
+    padding: 4px;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+}
+
+.seg {
+    position: relative;
+    cursor: pointer;
+}
+
+.seg input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.seg span {
+    display: block;
+    padding: 0.4rem 1rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    transition: var(--transition);
+    white-space: nowrap;
+}
+
+.seg:hover span { color: var(--text-main); }
+
+.seg input:checked + span {
+    background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+}
+
+.seg input:focus-visible + span {
+    outline: 2px solid var(--accent-1);
+    outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Picking hint                                                       */
+/* ------------------------------------------------------------------ */
+
+.pick-hint {
+    position: absolute;
+    bottom: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.55);
+    color: #fff;
+    font-size: 0.75rem;
+    padding: 0.35rem 0.85rem;
+    border-radius: 999px;
+    pointer-events: none;
+    backdrop-filter: blur(8px);
+    z-index: 25;
+}
+
+/* ------------------------------------------------------------------ */
+/* Official chip frame                                                */
+/* ------------------------------------------------------------------ */
+
+.chip-frame {
+    position: relative;
+    text-align: center;
+    min-height: 160px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.chip-frame img {
+    max-width: 100%;
+    max-height: 360px;
+    display: block;
+    margin: 0 auto;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    transition: opacity 0.25s ease;
+}
+
+.chip-spinner {
+    position: absolute;
+    width: 36px; height: 36px;
+    border: 3px solid rgba(255,255,255,0.15);
+    border-top-color: var(--accent-1);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.chip-badge {
+    position: absolute;
+    top: 8px; right: 8px;
+    background: rgba(0,0,0,0.6);
+    color: #fff;
+    font-size: 0.65rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 6px;
+    letter-spacing: 0.03em;
+}
+
+/* ------------------------------------------------------------------ */
+/* Pantone result info                                                */
+/* ------------------------------------------------------------------ */
+
+.pantone-colorname {
+    font-size: 1rem;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+    font-weight: 500;
+}
+
+.copyable { cursor: pointer; }
+.copyable:hover { color: var(--accent-1); }
+.copyable:focus-visible {
+    outline: 2px solid var(--accent-1);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* Confidence colour coding (ΔE based) */
+.confidence { font-weight: 600; }
+.conf-perfect    { color: #34d399; }
+.conf-excellent  { color: #6ee7b7; }
+.conf-good       { color: #fcd34d; }
+.conf-fair       { color: #fb923c; }
+.conf-approximate{ color: #f87171; }
+
+/* ------------------------------------------------------------------ */
+/* Alternative matches                                                */
+/* ------------------------------------------------------------------ */
+
+.alt-matches {
+    padding: 1.25rem 1.5rem;
+}
+
+.alt-matches h3 {
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+    font-weight: 600;
+}
+
+.alt-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.alt-item {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.6rem;
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.alt-item:hover { background: rgba(255,255,255,0.04); }
+
+.alt-item.selected {
+    border-color: var(--accent-1);
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.alt-swatch {
+    width: 40px; height: 40px;
+    border-radius: 8px;
+    flex-shrink: 0;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1);
+}
+
+.alt-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+
+.alt-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.alt-sub {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.alt-de {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.alt-conf {
+    font-size: 0.7rem;
+    font-weight: 500;
+    opacity: 0.8;
+}
+
+/* ------------------------------------------------------------------ */
+/* Footer                                                             */
+/* ------------------------------------------------------------------ */
+
+.app-footer {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    max-width: 700px;
+    margin: 0 auto;
+    line-height: 1.6;
+    opacity: 0.8;
+}
+
+/* ------------------------------------------------------------------ */
+/* Responsive                                                         */
+/* ------------------------------------------------------------------ */
+
+@media (max-width: 900px) {
+    .container { padding: 1.25rem; gap: 1.75rem; }
+    .toolbar { gap: 1.25rem; }
+    canvas { max-height: 55vh; }
+    .lens { width: 120px; height: 120px; }
+    .lens canvas { width: 120px; height: 120px; }
 }

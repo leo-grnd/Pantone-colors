@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pantone-matcher",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [".claude/static-server.mjs"],
+      "port": 8765
+    }
+  ]
+}
