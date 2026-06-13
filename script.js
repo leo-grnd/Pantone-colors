@@ -40,7 +40,8 @@ async function init() {
         'pantone-name', 'pantone-colorname', 'pantone-hex', 'pantone-confidence',
         'pantone-image-container', 'pantone-image', 'chip-spinner', 'chip-badge',
         'pantone-swatch-container', 'pantone-swatch', 'pantone-strip',
-        'download-btn', 'alt-matches', 'alt-list', 'toast', 'sr-live']);
+        'download-btn', 'alt-matches', 'alt-list', 'toast', 'sr-live',
+        'themeToggle', 'themeIcon']);
 
     els.ctx = els['image-canvas'].getContext('2d', { willReadFrequently: true });
     els.loupeCtx = els['loupe-canvas'].getContext('2d');
@@ -53,6 +54,28 @@ async function init() {
     setupCanvasPicking();
     setupClipboard();
     setupDownload();
+    setupTheme();
+}
+
+function setupTheme() {
+    function applyTheme(theme) {
+        if (theme === 'light') {
+            document.documentElement.setAttribute('data-theme', 'light');
+            els['themeIcon'].textContent = '☀';
+        } else {
+            document.documentElement.removeAttribute('data-theme');
+            els['themeIcon'].textContent = '☾';
+        }
+    }
+    const savedTheme = localStorage.getItem('pantone-theme');
+    const initialTheme = savedTheme || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    applyTheme(initialTheme);
+    els['themeToggle'].addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+        const next = current === 'light' ? 'dark' : 'light';
+        localStorage.setItem('pantone-theme', next);
+        applyTheme(next);
+    });
 }
 
 function cache(ids) {

@@ -3,49 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pantone Matcher | Trouver les couleurs Pantone depuis vos photos</title>
+    <title>PANTONE — Trouve ta correspondance couleur</title>
     <meta name="description" content="Importez une photo, choisissez une couleur et trouvez instantanément la correspondance Pantone la plus proche grâce à la méthode perceptuelle CIEDE2000. Un outil moderne pour les designers.">
-    <link rel="stylesheet" href="style.css">
+    <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#f5f1e8" media="(prefers-color-scheme: light)">
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="app-background"></div>
-    <main class="container">
+    <div class="container">
         <header>
-            <h1>Pantone <span class="accent">Matcher</span></h1>
-            <p>Importez une photo et choisissez une couleur pour trouver la correspondance Pantone la plus proche, avec la métrique perceptuelle <abbr title="Métrique CIE de référence pour mesurer l'écart perceptuel entre deux couleurs">CIEDE2000</abbr>.</p>
+            <div>
+                <div class="logo">P<span>ANTONE</span></div>
+                <div class="tagline">— Matcher · Temps réel</div>
+            </div>
+            <div class="meta">
+                <div class="meta-right">
+                    <div><span class="pulse" aria-hidden="true"></span>CIEDE2000</div>
+                    <button id="themeToggle" class="theme-toggle" aria-label="Changer de thème" title="Changer de thème">
+                        <span id="themeIcon" aria-hidden="true">☾</span>
+                    </button>
+                </div>
+            </div>
         </header>
 
+        <section class="hero">
+            <h1>Trouve ton <em>Pantone.</em><br />Instantanément.</h1>
+            <p>Importez une photo et choisissez une couleur pour trouver la correspondance Pantone la plus proche, avec la métrique perceptuelle CIEDE2000.</p>
+        </section>
+
         <!-- Toolbar -->
-        <div class="toolbar" role="region" aria-label="Options de correspondance">
-            <div class="control-group">
-                <span class="control-label" id="lib-label">Bibliothèque</span>
-                <div class="segmented" role="radiogroup" aria-labelledby="lib-label">
-                    <label class="seg"><input type="radio" name="library" value="MIXED" checked><span>Mixte</span></label>
-                    <label class="seg"><input type="radio" name="library" value="C"><span>Papier couché (C)</span></label>
-                    <label class="seg"><input type="radio" name="library" value="TCX"><span>Textile (TCX)</span></label>
+        <section class="search-panel">
+            <div class="form-grid">
+                <div class="field">
+                    <label>→ Bibliothèque</label>
+                    <div class="distance-mode" role="radiogroup" aria-label="Bibliothèque Pantone">
+                        <input type="radio" id="lib-mixed" name="library" value="MIXED" checked>
+                        <label for="lib-mixed" class="mode-option">Mixte</label>
+                        <input type="radio" id="lib-c" name="library" value="C">
+                        <label for="lib-c" class="mode-option">Papier couché (C)</label>
+                        <input type="radio" id="lib-tcx" name="library" value="TCX">
+                        <label for="lib-tcx" class="mode-option">Textile (TCX)</label>
+                    </div>
+                </div>
+                <div class="field">
+                    <label>→ Zone d'échantillonnage</label>
+                    <div class="distance-mode" role="radiogroup" aria-label="Zone d'échantillonnage">
+                        <input type="radio" id="sample-0" name="sample" value="0">
+                        <label for="sample-0" class="mode-option">1px</label>
+                        <input type="radio" id="sample-2" name="sample" value="2" checked>
+                        <label for="sample-2" class="mode-option">5×5</label>
+                        <input type="radio" id="sample-5" name="sample" value="5">
+                        <label for="sample-5" class="mode-option">11×11</label>
+                    </div>
                 </div>
             </div>
-            <div class="control-group">
-                <span class="control-label" id="sample-label">Zone d'échantillonnage</span>
-                <div class="segmented" role="radiogroup" aria-labelledby="sample-label">
-                    <label class="seg"><input type="radio" name="sample" value="0"><span>1px</span></label>
-                    <label class="seg"><input type="radio" name="sample" value="2" checked><span>5×5</span></label>
-                    <label class="seg"><input type="radio" name="sample" value="5"><span>11×11</span></label>
-                </div>
-            </div>
-        </div>
+        </section>
 
         <div class="workspace">
             <div class="image-section card">
                 <div id="dropzone" class="dropzone">
                     <input type="file" id="file-input" accept="image/png, image/jpeg, image/webp" aria-label="Importer une image">
                     <div class="dropzone-content">
-                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                        <span class="upload-text">Cliquez ou déposez une image ici</span>
-                        <span class="upload-hint">Formats JPG, PNG et WEBP pris en charge</span>
+                        <span class="upload-text">→ Dépose une image ici</span>
+                        <span class="upload-hint">JPG, PNG, WEBP</span>
                     </div>
                 </div>
                 <div class="canvas-container" id="canvas-container" hidden>
@@ -53,9 +77,7 @@
                     <div class="lens" id="lens" aria-hidden="true">
                         <canvas id="loupe-canvas" width="140" height="140"></canvas>
                     </div>
-                    <button id="reset-btn" class="icon-btn" title="Importer une autre image" aria-label="Importer une autre image">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                    </button>
+                    <button id="reset-btn" class="icon-btn" title="Importer une autre image" aria-label="Importer une autre image">×</button>
                     <div class="pick-hint" id="pick-hint">Déplacez pour prévisualiser · cliquez pour verrouiller</div>
                 </div>
             </div>
@@ -78,13 +100,9 @@
                     </div>
                 </div>
 
-                <div class="match-icon" aria-hidden="true">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>
-                </div>
-
                 <div class="color-card card pantone-card">
                     <div id="pantone-image-container" class="chip-frame" hidden>
-                        <div class="chip-spinner" id="chip-spinner" hidden></div>
+                        <div class="chip-spinner loader" id="chip-spinner" hidden></div>
                         <img id="pantone-image" src="" alt="Pastille de couleur Pantone officielle">
                         <span class="chip-badge" id="chip-badge" hidden>Approximation</span>
                     </div>
@@ -106,22 +124,21 @@
                             <span class="label">Fiabilité</span>
                             <span class="value confidence" id="pantone-confidence">-</span>
                         </div>
-                        <button id="download-btn" class="download-btn" hidden>Télécharger le PNG</button>
+                        <button id="download-btn" class="btn-search" hidden style="margin-top: 1rem; width: 100%;">Télécharger le PNG</button>
                     </div>
                 </div>
 
                 <div class="alt-matches card" id="alt-matches" hidden>
-                    <h3>Autres correspondances proches</h3>
+                    <h3>Autres correspondances</h3>
                     <ul id="alt-list" class="alt-list"></ul>
                 </div>
             </div>
         </div>
 
-        <footer class="app-footer">
-            <p>Les correspondances utilisent le ΔE perceptuel (CIEDE2000). Les pastilles proviennent du Pantone Color Finder officiel.
-               Les valeurs hex affichées sont des approximations sRGB des encres Pantone physiques et peuvent différer d'un nuancier imprimé.</p>
+        <footer>
+            Les correspondances utilisent le ΔE perceptuel (CIEDE2000). Les valeurs hex affichées sont des approximations sRGB.
         </footer>
-    </main>
+    </div>
 
     <div id="toast" class="toast" role="status" aria-live="polite">Copié dans le presse-papiers !</div>
     <div id="sr-live" class="visually-hidden" aria-live="polite"></div>
