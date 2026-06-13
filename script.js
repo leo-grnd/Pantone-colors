@@ -21,8 +21,10 @@ let libraries = { C: [], TCX: [] };
 let currentLibrary = 'C';
 let sampleRadius = 2;       // 0 = 1px, 2 = 5×5, 5 = 11×11
 let lastPick = null;        // { x, y, rgb }  (intrinsic canvas coords)
+let lockedPick = null;      // pick currently used for the displayed Pantone result
 let currentMatches = [];
 let selectedMatch = null;
+let pantoneLocked = false;
 let downloadProxyUrl = null; // proxy URL of the currently displayed official chip (for download)
 
 // ---------------------------------------------------------------------------
@@ -99,7 +101,7 @@ function setupUpload() {
         els['dropzone'].hidden = false;
         els['canvas-container'].hidden = true;
         els['file-input'].value = '';
-        lastPick = null;
+        resetSelectionState();
     });
 }
 
@@ -143,6 +145,7 @@ function drawToCanvas(source) {
     els.ctx.drawImage(source, 0, 0, w, h);
     if (typeof source.close === 'function') source.close(); // free the ImageBitmap
 
+    resetSelectionState();
     els['dropzone'].hidden = true;
     els['canvas-container'].hidden = false;
 }
@@ -207,7 +210,7 @@ function processPreview(e) {
     updateLoupe(e, rect, x, y);
 
     currentMatches = topMatches(rgb);
-    if (currentMatches.length) {
+    if (currentMatches.length && !pantoneLocked) {
         // Live: update text + alt list, but defer the network chip load to lock.
         selectMatch(currentMatches[0], false);
         renderAltList(currentMatches);
@@ -215,8 +218,17 @@ function processPreview(e) {
 }
 
 function lockPick() {
-    if (!selectedMatch) return;
-    loadChip(selectedMatch);
+    if (pendingEvent) processPreview(pendingEvent);
+    if (!lastPick) return;
+
+    currentMatches = topMatches(lastPick.rgb);
+    if (!currentMatches.length) return;
+
+    pantoneLocked = true;
+    lockedPick = copyPick(lastPick);
+    selectMatch(currentMatches[0], true);
+    renderAltList(currentMatches);
+
     els['download-btn'].hidden = false;
     announce(`${selectedMatch.displayName}. ${describeConfidence(selectedMatch.deltaE)}.`);
 }
@@ -263,17 +275,32 @@ function topMatches(rgb, k = 3) {
 }
 
 function recomputeFromLastPick(reSample) {
-    if (!lastPick) return;
     const canvas = els['image-canvas'];
-    if (reSample) {
+
+    if (reSample && lastPick) {
         const rgb = sampleRegion(els.ctx, lastPick.x, lastPick.y, sampleRadius, canvas.width, canvas.height);
         if (rgb) { lastPick.rgb = rgb; updatePickedColor(rgb); }
     }
-    currentMatches = topMatches(lastPick.rgb);
-    if (currentMatches.length) {
-        selectMatch(currentMatches[0], true);
+
+    if (lastPick) {
+        currentMatches = topMatches(lastPick.rgb);
+    }
+
+    if (pantoneLocked && lockedPick) {
+        if (reSample) {
+            const rgb = sampleRegion(els.ctx, lockedPick.x, lockedPick.y, sampleRadius, canvas.width, canvas.height);
+            if (rgb) lockedPick.rgb = rgb;
+        }
+
+        const lockedMatches = topMatches(lockedPick.rgb);
+        if (lockedMatches.length) {
+            selectMatch(lockedMatches[0], true);
+            renderAltList(lockedMatches);
+            els['download-btn'].hidden = false;
+        }
+    } else if (currentMatches.length) {
+        selectMatch(currentMatches[0], false);
         renderAltList(currentMatches);
-        els['download-btn'].hidden = false;
     }
 }
 
@@ -333,7 +360,13 @@ function renderAltList(matches) {
                 ${m.colorName ? `<span class="alt-sub">${m.colorName}</span>` : ''}
             </span>
             <span class="alt-de conf-${conf.level}">ΔE ${m.deltaE.toFixed(1)}<span class="alt-conf">${conf.label}</span></span>`;
-        li.addEventListener('click', () => { selectMatch(m, true); els['download-btn'].hidden = false; });
+        li.addEventListener('click', () => {
+            pantoneLocked = true;
+            if (!lockedPick && lastPick) lockedPick = copyPick(lastPick);
+            selectMatch(m, true);
+            els['download-btn'].hidden = false;
+            announce(`${m.displayName}. ${describeConfidence(m.deltaE)}.`);
+        });
         list.appendChild(li);
     }
     els['alt-matches'].hidden = matches.length === 0;
@@ -504,6 +537,42 @@ function showToast(message) {
     toast.classList.add('show');
     clearTimeout(showToast._t);
     showToast._t = setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
+function copyPick(pick) {
+    return {
+        x: pick.x,
+        y: pick.y,
+        rgb: { ...pick.rgb },
+    };
+}
+
+function resetSelectionState() {
+    lastPick = null;
+    lockedPick = null;
+    currentMatches = [];
+    selectedMatch = null;
+    pantoneLocked = false;
+    pendingEvent = null;
+    downloadProxyUrl = null;
+
+    els['picked-hex'].textContent = '-';
+    els['picked-rgb'].textContent = '-';
+    els['picked-swatch'].style.backgroundColor = '#1a1a1a';
+    els['pantone-name'].textContent = '-';
+    els['pantone-colorname'].textContent = '';
+    els['pantone-colorname'].hidden = true;
+    els['pantone-hex'].textContent = '-';
+    els['pantone-confidence'].textContent = '-';
+    els['pantone-confidence'].className = 'value confidence';
+    els['pantone-image-container'].hidden = true;
+    els['chip-spinner'].hidden = true;
+    els['pantone-swatch-container'].hidden = false;
+    els['pantone-swatch'].style.backgroundColor = '#1a1a1a';
+    els['pantone-strip'].hidden = true;
+    els['alt-list'].innerHTML = '';
+    els['alt-matches'].hidden = true;
+    els['download-btn'].hidden = true;
 }
 
 function announce(message) {
