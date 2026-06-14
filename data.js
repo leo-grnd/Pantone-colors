@@ -60,6 +60,21 @@ function buildEntry(library, code, hex, colorName) {
     };
 }
 
+// Parallel Float32Array Lab columns for a library, enabling a tight,
+// allocation-free distance scan during matching.
+function toColumns(entries) {
+    const n = entries.length;
+    const L = new Float32Array(n), A = new Float32Array(n), B = new Float32Array(n), Ch = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+        const lab = entries[i].lab;
+        L[i] = lab[0];
+        A[i] = lab[1];
+        B[i] = lab[2];
+        Ch[i] = Math.hypot(lab[1], lab[2]); // chroma, for the ΔE94-style prefilter
+    }
+    return { L, A, B, Ch };
+}
+
 export async function loadLibraries() {
     const [coatedRaw, tcxRaw] = await Promise.all([
         fetch('pantone.json').then(r => r.json()).catch(() => []),
@@ -74,5 +89,10 @@ export async function loadLibraries() {
         .map(([code, v]) => buildEntry('TCX', code, v.hex, titleCase(v.name || '')))
         .filter(Boolean);
 
-    return { C, TCX, MIXED: [...C, ...TCX] };
+    const MIXED = [...C, ...TCX];
+
+    return {
+        C, TCX, MIXED,
+        cols: { C: toColumns(C), TCX: toColumns(TCX), MIXED: toColumns(MIXED) },
+    };
 }

@@ -201,6 +201,95 @@ export function sampleRegion(ctx, cx, cy, radius, width, height) {
 }
 
 // ---------------------------------------------------------------------------
+// Edge-aware sampling — dominant colour of the N×N window.
+// ---------------------------------------------------------------------------
+//
+// A plain average (sampleRegion) is wrong when the window straddles a boundary
+// between two colours: it returns a blend that matches neither. Instead we split
+// the window's pixels into two perceptual clusters (k=2, deterministic
+// farthest-first seeding in Lab) and return the linear-light mean of the larger
+// cluster — i.e. the colour the user is actually pointing at. On a uniform window
+// the two clusters collapse together, so the result matches the plain average.
+//
+// Falls back to sampleRegion for a single pixel or a tiny window. Returns sRGB
+// {r,g,b} or null.
+
+export function sampleDominant(ctx, cx, cy, radius, width, height) {
+    if (radius <= 0) return sampleRegion(ctx, cx, cy, radius, width, height);
+
+    const x0 = Math.max(0, cx - radius);
+    const y0 = Math.max(0, cy - radius);
+    const x1 = Math.min(width - 1, cx + radius);
+    const y1 = Math.min(height - 1, cy + radius);
+    const sw = x1 - x0 + 1;
+    const sh = y1 - y0 + 1;
+    if (sw <= 0 || sh <= 0) return null;
+
+    const data = ctx.getImageData(x0, y0, sw, sh).data;
+
+    // Collect opaque pixels: Lab (for clustering) + linear RGB (for the result).
+    const px = data.length / 4;
+    const labL = new Float64Array(px), labA = new Float64Array(px), labB = new Float64Array(px);
+    const linR = new Float64Array(px), linG = new Float64Array(px), linB = new Float64Array(px);
+    let n = 0;
+    for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] === 0) continue;
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        const lab = rgbToLab(r, g, b);
+        labL[n] = lab[0]; labA[n] = lab[1]; labB[n] = lab[2];
+        linR[n] = srgbToLinear(r); linG[n] = srgbToLinear(g); linB[n] = srgbToLinear(b);
+        n++;
+    }
+    if (n === 0) return null;
+    if (n <= 4) return sampleRegion(ctx, cx, cy, radius, width, height); // too few to cluster
+
+    // Two seeds: first pixel, then the pixel farthest from it (Lab, squared).
+    let c0L = labL[0], c0A = labA[0], c0B = labB[0];
+    let far = 0, farD = -1;
+    for (let i = 0; i < n; i++) {
+        const dl = labL[i] - c0L, da = labA[i] - c0A, db = labB[i] - c0B;
+        const d = dl * dl + da * da + db * db;
+        if (d > farD) { farD = d; far = i; }
+    }
+    let c1L = labL[far], c1A = labA[far], c1B = labB[far];
+
+    // A few Lloyd iterations.
+    let n0 = 0;
+    let s0R = 0, s0G = 0, s0B = 0, s1R = 0, s1G = 0, s1B = 0;
+    for (let iter = 0; iter < 6; iter++) {
+        let a0L = 0, a0A = 0, a0B = 0, cnt0 = 0;
+        let a1L = 0, a1A = 0, a1B = 0;
+        s0R = 0; s0G = 0; s0B = 0; s1R = 0; s1G = 0; s1B = 0;
+        for (let i = 0; i < n; i++) {
+            const d0l = labL[i] - c0L, d0a = labA[i] - c0A, d0b = labB[i] - c0B;
+            const d1l = labL[i] - c1L, d1a = labA[i] - c1A, d1b = labB[i] - c1B;
+            if (d0l * d0l + d0a * d0a + d0b * d0b <= d1l * d1l + d1a * d1a + d1b * d1b) {
+                a0L += labL[i]; a0A += labA[i]; a0B += labB[i]; cnt0++;
+                s0R += linR[i]; s0G += linG[i]; s0B += linB[i];
+            } else {
+                a1L += labL[i]; a1A += labA[i]; a1B += labB[i];
+                s1R += linR[i]; s1G += linG[i]; s1B += linB[i];
+            }
+        }
+        n0 = cnt0;
+        const cnt1 = n - cnt0;
+        if (cnt0) { c0L = a0L / cnt0; c0A = a0A / cnt0; c0B = a0B / cnt0; }
+        if (cnt1) { c1L = a1L / cnt1; c1A = a1A / cnt1; c1B = a1B / cnt1; }
+    }
+
+    // Return the linear-light mean of the larger cluster.
+    const cnt1 = n - n0;
+    const useFirst = n0 >= cnt1;
+    const cnt = useFirst ? n0 : cnt1;
+    const r = useFirst ? s0R : s1R, g = useFirst ? s0G : s1G, b = useFirst ? s0B : s1B;
+    return {
+        r: linearToSrgb(r / cnt),
+        g: linearToSrgb(g / cnt),
+        b: linearToSrgb(b / cnt),
+    };
+}
+
+// ---------------------------------------------------------------------------
 // CIELAB -> sRGB (inverse of rgbToLab), needed to render cluster centroids.
 // ---------------------------------------------------------------------------
 
