@@ -151,6 +151,20 @@ header {
   transform: rotate(15deg);
 }
 
+.nav-link {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  text-decoration: none;
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.7rem;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+  white-space: nowrap;
+}
+.nav-link:hover { color: var(--accent); border-color: var(--accent); }
+
 .hero { margin-bottom: 2.5rem; }
 
 .hero h1 {
