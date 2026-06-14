@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comment ça marche — Pantone Matcher</title>
+    <meta name="description" content="Sous le capot du Pantone Matcher : du pixel cliqué à la pastille Pantone officielle. Échantillonnage anti-bord, CIELAB, distance perceptuelle CIEDE2000 et recherche en deux étapes.">
+    <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#f5f1e8" media="(prefers-color-scheme: light)">
+    <!-- Apply saved theme before first paint to avoid a flash. -->
+    <script>(function(){try{var t=localStorage.getItem('pantone-theme')||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');if(t==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="comment-ca-marche.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div>
+                <a class="logo" href="index.html">P<span>ANTONE</span></a>
+                <div class="tagline">— Comment ça marche</div>
+            </div>
+            <div class="meta">
+                <div class="meta-right">
+                    <a class="nav-link" href="index.html">← Retour à l'outil</a>
+                    <button id="themeToggle" class="theme-toggle" aria-label="Changer de thème" title="Changer de thème">
+                        <span id="themeIcon" aria-hidden="true">☾</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <section class="hero hiw-hero">
+            <h1>Sous le <em>capot.</em></h1>
+            <p>Du pixel que tu cliques jusqu'à la pastille Pantone officielle : voici <strong>tout le chemin</strong>,
+               étape par étape, et la science des couleurs qui se cache derrière chaque correspondance.</p>
+        </section>
+
+        <!-- Key numbers -->
+        <section class="stats" aria-label="Chiffres clés">
+            <div class="stat">
+                <div class="stat-num" data-count="3651">0</div>
+                <div class="stat-lbl">couleurs de référence</div>
+            </div>
+            <div class="stat">
+                <div class="stat-num" data-count="64">0</div>
+                <div class="stat-lbl">candidats pré-filtrés</div>
+            </div>
+            <div class="stat">
+                <div class="stat-num">ΔE<span class="sub">00</span></div>
+                <div class="stat-lbl">métrique perceptuelle</div>
+            </div>
+            <div class="stat">
+                <div class="stat-num">~0,1<span class="unit">ms</span></div>
+                <div class="stat-lbl">par correspondance</div>
+            </div>
+        </section>
+
+        <p class="flow-intro">Le trajet complet d'un clic <span class="arrow">↓</span></p>
+
+        <ol class="pipeline">
+
+            <li class="step card reveal">
+                <div class="step-head"><span class="step-num">01</span><h2>Import &amp; décodage</h2></div>
+                <div class="step-body">
+                    <div class="step-text">
+                        <p>L'image est décodée avec <code>createImageBitmap</code>, qui applique l'<strong>orientation EXIF</strong> :
+                           une photo prise de travers est automatiquement remise droite avant l'échantillonnage.</p>
+                        <p>Le canvas est plafonné à <code>4096&nbsp;px</code> sur le grand côté — assez pour une précision parfaite,
+                           sans saturer la mémoire d'un téléphone. Tout se passe <strong>dans ton navigateur</strong> : aucune image n'est envoyée.</p>
+                    </div>
+                    <div class="step-visual">
+                        <div class="vchips">
+                            <span class="vchip">📐 EXIF redressée</span>
+                            <span class="vchip">≤ 4096&nbsp;px</span>
+                            <span class="vchip">100% local</span>
+                        </div>
+                    </div>
+                </div>
+            </li>
+
+            <li class="step card reveal">
+                <div class="step-head"><span class="step-num">02</span><h2>Échantillonnage anti-bord</h2></div>
+                <div class="step-body">
+                    <div class="step-text">
+                        <p>Un seul pixel est bruité (JPEG, capteur). On lit donc une fenêtre <code>1px</code>, <code>5×5</code> ou <code>11×11</code>,
+                           moyennée en <strong>lumière linéaire</strong> (et non en sRGB encodé, ce qui serait physiquement faux).</p>
+                        <p>Surtout : si la fenêtre est <strong>à cheval sur une frontière</strong>, une simple moyenne donne une couleur
+                           qui n'existe nulle part. On sépare donc les pixels en 2 groupes (<code>k-means</code>) et on garde la
+                           <strong>couleur dominante</strong>.</p>
+                    </div>
+                    <div class="step-visual">
+                        <div class="edge-demo">
+                            <div class="edge-grid" aria-hidden="true">
+                                <div class="edge-left"></div>
+                                <div class="edge-right"></div>
+                                <div class="edge-window"></div>
+                            </div>
+                            <div class="edge-out">
+                                <div class="edge-res bad"><span class="dot" style="background:#a3374b"></span> Moyenne → violet <em>✗</em></div>
+                                <div class="edge-res good"><span class="dot" style="background:#e63946"></span> Dominante → rouge <em>✓</em></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </li>
+
+            <li class="step card reveal">
+                <div class="step-head"><span class="step-num">03</span><h2>Vers un espace perceptuel</h2></div>
+                <div class="step-body">
+                    <div class="step-text">
+                        <p>Les distances en RGB ne reflètent pas ce que voit l'œil. On convertit donc la couleur vers
+                           <strong>CIELAB</strong>, où une distance ≈ une différence perçue.</p>
+                        <p>La chaîne complète, calculée une fois par couleur :</p>
+                    </div>
+                    <div class="step-visual">
+                        <div class="convo">
+                            <span class="cstage">sRGB <i>0–255</i></span><span class="carrow">→</span>
+                            <span class="cstage">Linéaire <i>gamma</i></span><span class="carrow">→</span>
+                            <span class="cstage">XYZ <i>D65</i></span><span class="carrow">→</span>
+                            <span class="cstage hl">L*a*b*</span>
+                        </div>
+                        <p class="vnote">Point blanc de référence <code>D65</code> · L* = clarté, a*/b* = axes chromatiques.</p>
+                    </div>
+                </div>
+            </li>
+
+            <li class="step card reveal">
+                <div class="step-head"><span class="step-num">04</span><h2>La bonne distance : CIEDE2000</h2></div>
+                <div class="step-body">
+                    <div class="step-text">
+                        <p>On compare avec <strong>ΔE₀₀ (CIEDE2000)</strong>, le standard de l'industrie. Il pondère séparément
+                           clarté, chroma et teinte, et corrige même la zone des bleus — bien plus fidèle qu'une distance brute.</p>
+                        <p>Le ΔE obtenu donne directement un <strong>indice de fiabilité</strong> :</p>
+                    </div>
+                    <div class="step-visual">
+                        <div class="de-scale">
+                            <div class="de-band" style="--c:#4ade80"><b>&lt;1</b><span>Parfait</span></div>
+                            <div class="de-band" style="--c:#34d399"><b>&lt;2</b><span>Excellent</span></div>
+                            <div class="de-band" style="--c:#facc15"><b>&lt;5</b><span>Bon</span></div>
+                            <div class="de-band" style="--c:#fb923c"><b>&lt;10</b><span>Correct</span></div>
+                            <div class="de-band" style="--c:#ef4444"><b>≥10</b><span>Approx.</span></div>
+                        </div>
+                    </div>
+                </div>
+            </li>
+
+            <li class="step card reveal">
+                <div class="step-head"><span class="step-num">05</span><h2>Recherche en 2 étapes</h2></div>
+                <div class="step-body">
+                    <div class="step-text">
+                        <p>Comparer le pixel aux <strong>3651 couleurs</strong> avec le coûteux CIEDE2000 <em>à chaque survol</em> serait lourd.
+                           On procède en deux temps :</p>
+                        <p><strong>① Pré-filtre éclair</strong> — un balayage type ΔE94 sur des tableaux <code>Float32</code>
+                           (sans trigonométrie, zéro allocation) garde les <strong>64 meilleurs candidats</strong>.</p>
+                        <p><strong>② CIEDE2000 exact</strong> uniquement sur ces 64 → top&nbsp;3. Et si le meilleur match reste mauvais
+                           (ΔE&nbsp;&gt;&nbsp;10), un <strong>scan complet de secours</strong> garantit un résultat <strong>identique</strong> à la force brute.</p>
+                    </div>
+                    <div class="step-visual">
+                        <div class="funnel">
+                            <div class="fbar f1"><span>3651</span><i>toutes les couleurs</i></div>
+                            <div class="fbar f2"><span>64</span><i>pré-filtre rapide</i></div>
+                            <div class="fbar f3"><span>3</span><i>CIEDE2000 exact</i></div>
+                        </div>
+                        <div class="badges">
+                            <span class="badge">≈ 12–20× plus rapide</span>
+                            <span class="badge">top-1 100% identique</span>
+                            <span class="badge">validé sur 20 000 couleurs</span>
+                        </div>
+                    </div>
+                </div>
+            </li>
+
+            <li class="step card reveal">
+                <div class="step-head"><span class="step-num">06</span><h2>Palette dominante</h2></div>
+                <div class="step-body">
+                    <div class="step-text">
+                        <p>En parallèle, l'image est réduite à <code>120&nbsp;px</code> puis regroupée en couleurs par
+                           <strong>k-means dans l'espace Lab</strong>, avec un amorçage <em>farthest-first</em> déterministe
+                           (mêmes 5 couleurs à chaque fois, jamais de scintillement).</p>
+                        <p>Les 5 teintes sont triées par <strong>dominance</strong> (population du groupe). Un clic dessus relance
+                           tout le pipeline.</p>
+                    </div>
+                    <div class="step-visual">
+                        <div class="palette-demo" aria-hidden="true">
+                            <span style="--c:#e63946;--w:40%"><i>40%</i></span>
+                            <span style="--c:#1d3557;--w:25%"><i>25%</i></span>
+                            <span style="--c:#2a9d8f;--w:20%"><i>20%</i></span>
+                            <span style="--c:#e9c46a;--w:10%"><i>10%</i></span>
+                            <span style="--c:#f1faee;--w:5%"><i>5%</i></span>
+                        </div>
+                    </div>
+                </div>
+            </li>
+
+            <li class="step card reveal">
+                <div class="step-head"><span class="step-num">07</span><h2>La pastille officielle</h2></div>
+                <div class="step-body">
+                    <div class="step-text">
+                        <p>Le résultat affiche la <strong>vraie pastille Pantone</strong>, récupérée depuis pantone.com. Une chaîne de
+                           repli garantit qu'il y a <em>toujours</em> quelque chose à montrer :</p>
+                    </div>
+                    <div class="step-visual">
+                        <div class="fallback">
+                            <span class="fstep">pantone.com <i>direct</i></span><span class="carrow">→</span>
+                            <span class="fstep">proxy <i>wsrv.nl (CORS)</i></span><span class="carrow">→</span>
+                            <span class="fstep">pastille générée <i>secours</i></span>
+                        </div>
+                        <p class="vnote">Le téléchargement PNG passe par le proxy pour pouvoir lire les pixels dans un canvas.</p>
+                    </div>
+                </div>
+            </li>
+        </ol>
+
+        <section class="outro card reveal">
+            <h2>Et c'est tout — <em>côté navigateur.</em></h2>
+            <p>Aucun serveur, aucune dépendance lourde, aucune donnée envoyée. Juste du HTML, du CSS et du JavaScript,
+               déployable tel quel sur GitHub&nbsp;Pages.</p>
+            <a class="cta" href="index.html">Essayer l'outil →</a>
+        </section>
+
+        <footer>
+            Correspondances perceptuelles ΔE (CIEDE2000) · pastilles issues du Pantone Color Finder officiel.
+        </footer>
+    </div>
+
+    <script>
+    (function () {
+        // Theme toggle (shares the 'pantone-theme' key with the main app).
+        var icon = document.getElementById('themeIcon');
+        function apply(t) {
+            if (t === 'light') { document.documentElement.setAttribute('data-theme', 'light'); icon.textContent = '☀'; }
+            else { document.documentElement.removeAttribute('data-theme'); icon.textContent = '☾'; }
+        }
+        apply(localStorage.getItem('pantone-theme') || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
+        document.getElementById('themeToggle').addEventListener('click', function () {
+            var next = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+            localStorage.setItem('pantone-theme', next); apply(next);
+        });
+
+        var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        // Reveal-on-scroll for steps.
+        var reveals = document.querySelectorAll('.reveal');
+        if (reduce || !('IntersectionObserver' in window)) {
+            reveals.forEach(function (el) { el.classList.add('in'); });
+        } else {
+            var io = new IntersectionObserver(function (entries) {
+                entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+            }, { threshold: 0.18 });
+            reveals.forEach(function (el) { io.observe(el); });
+        }
+
+        // Count-up for the key numbers.
+        var nums = document.querySelectorAll('.stat-num[data-count]');
+        function countUp(el) {
+            var target = parseInt(el.getAttribute('data-count'), 10);
+            if (reduce) { el.textContent = target.toLocaleString('fr-FR'); return; }
+            var start = null, dur = 1100;
+            function tick(ts) {
+                if (start === null) start = ts;
+                var p = Math.min(1, (ts - start) / dur);
+                var eased = 1 - Math.pow(1 - p, 3);
+                el.textContent = Math.round(target * eased).toLocaleString('fr-FR');
+                if (p < 1) requestAnimationFrame(tick);
+            }
+            requestAnimationFrame(tick);
+        }
+        if (!('IntersectionObserver' in window)) {
+            nums.forEach(countUp);
+        } else {
+            var io2 = new IntersectionObserver(function (entries) {
+                entries.forEach(function (e) { if (e.isIntersecting) { countUp(e.target); io2.unobserve(e.target); } });
+            }, { threshold: 0.6 });
+            nums.forEach(function (el) { io2.observe(el); });
+        }
+    })();
+    </script>
+</body>
+</html>
