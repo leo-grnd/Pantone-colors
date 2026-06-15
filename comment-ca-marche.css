@@ -176,6 +176,25 @@ code {
 .fbar.f1 { width: 100%; }
 .fbar.f2 { width: 64%; }
 .fbar.f3 { width: 32%; }
+.vsub {
+    font-size: 0.68rem !important;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--ink-dim) !important;
+    text-align: center;
+    margin: 1rem 0 0.5rem !important;
+}
+.lib-breakdown { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: center; }
+.libchip {
+    font-size: 0.72rem;
+    padding: 0.4rem 0.65rem;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    color: var(--ink-dim);
+    white-space: nowrap;
+}
+.libchip b { color: var(--accent); font-family: 'Archivo Black', sans-serif; font-size: 0.78rem; margin-left: 0.3rem; }
+
 .badges { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; justify-content: center; }
 .badge {
     font-size: 0.68rem; padding: 0.35rem 0.6rem;
