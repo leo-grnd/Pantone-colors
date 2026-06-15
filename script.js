@@ -49,8 +49,10 @@ async function init() {
         'download-btn', 'alt-matches', 'alt-list', 'toast', 'sr-live',
         'themeToggle', 'themeIcon', 'palette', 'palette-swatches']);
 
-    els.ctx = els['image-canvas'].getContext('2d', { willReadFrequently: true });
-    els.loupeCtx = els['loupe-canvas'].getContext('2d');
+    // Pin the canvas to sRGB so wide-gamut (Display-P3) images are colour-managed
+    // down to sRGB on draw — consistent with our sRGB hex reference data.
+    els.ctx = els['image-canvas'].getContext('2d', { willReadFrequently: true, colorSpace: 'srgb' });
+    els.loupeCtx = els['loupe-canvas'].getContext('2d', { colorSpace: 'srgb' });
 
     libraries = await loadLibraries();
     console.log(`Bibliothèques chargées — Couché: ${libraries.C.length}, Textile TCX: ${libraries.TCX.length}, Métallisé: ${libraries.METALLIC.length}, Pastel/Néon: ${libraries.PASTEL.length} (Mixte: ${libraries.MIXED.length})`);
@@ -194,10 +196,10 @@ function buildPalette() {
     const th = Math.max(1, Math.round(canvas.height * scale));
     const tmp = document.createElement('canvas');
     tmp.width = tw; tmp.height = th;
-    const tctx = tmp.getContext('2d', { willReadFrequently: true });
+    const tctx = tmp.getContext('2d', { willReadFrequently: true, colorSpace: 'srgb' });
     tctx.drawImage(canvas, 0, 0, tw, th);
 
-    const palette = extractPalette(tctx.getImageData(0, 0, tw, th).data, 5);
+    const palette = extractPalette(tctx.getImageData(0, 0, tw, th, { colorSpace: 'srgb' }).data, 5);
     renderPalette(palette);
 }
 

@@ -182,7 +182,7 @@ export function sampleRegion(ctx, cx, cy, radius, width, height) {
     const sh = y1 - y0 + 1;
     if (sw <= 0 || sh <= 0) return null;
 
-    const data = ctx.getImageData(x0, y0, sw, sh).data;
+    const data = ctx.getImageData(x0, y0, sw, sh, { colorSpace: 'srgb' }).data;
     let rl = 0, gl = 0, bl = 0, count = 0;
     for (let i = 0; i < data.length; i += 4) {
         if (data[i + 3] === 0) continue; // skip transparent
@@ -225,7 +225,7 @@ export function sampleDominant(ctx, cx, cy, radius, width, height) {
     const sh = y1 - y0 + 1;
     if (sw <= 0 || sh <= 0) return null;
 
-    const data = ctx.getImageData(x0, y0, sw, sh).data;
+    const data = ctx.getImageData(x0, y0, sw, sh, { colorSpace: 'srgb' }).data;
 
     // Collect opaque pixels: Lab (for clustering) + linear RGB (for the result).
     const px = data.length / 4;
