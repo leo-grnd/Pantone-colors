@@ -23,7 +23,7 @@ const _candDst = new Float64Array(PREFILTER);
 // State
 // ---------------------------------------------------------------------------
 
-let libraries = { C: [], TCX: [], MIXED: [], cols: { C: null, TCX: null, MIXED: null } };
+let libraries = { C: [], TCX: [], METALLIC: [], PASTEL: [], MIXED: [], cols: {} };
 let currentLibrary = 'MIXED';
 let sampleRadius = 2;       // 0 = 1px, 2 = 5×5, 5 = 11×11
 let lastPick = null;        // { x, y, rgb }  (intrinsic canvas coords)
@@ -53,7 +53,7 @@ async function init() {
     els.loupeCtx = els['loupe-canvas'].getContext('2d');
 
     libraries = await loadLibraries();
-    console.log(`${libraries.C.length} couleurs Pantone Papier couché et ${libraries.TCX.length} couleurs Textile TCX chargées`);
+    console.log(`Bibliothèques chargées — Couché: ${libraries.C.length}, Textile TCX: ${libraries.TCX.length}, Métallisé: ${libraries.METALLIC.length}, Pastel/Néon: ${libraries.PASTEL.length} (Mixte: ${libraries.MIXED.length})`);
 
     setupControls();
     setupUpload();

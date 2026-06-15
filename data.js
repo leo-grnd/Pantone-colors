@@ -76,23 +76,34 @@ function toColumns(entries) {
 }
 
 export async function loadLibraries() {
-    const [coatedRaw, tcxRaw] = await Promise.all([
+    const [coatedRaw, tcxRaw, metalRaw, pastelRaw] = await Promise.all([
         fetch('pantone.json').then(r => r.json()).catch(() => []),
         fetch('pantone-tcx.json').then(r => r.json()).catch(() => ({})),
+        fetch('pantone-metallic.json').then(r => r.json()).catch(() => []),
+        fetch('pantone-pastels-neons.json').then(r => r.json()).catch(() => []),
     ]);
 
-    const C = (Array.isArray(coatedRaw) ? coatedRaw : [])
-        .map(item => buildEntry('C', item.pantone, item.hex, null))
+    // Coated, Metallic and Pastels/Neons share the same {pantone, hex} array shape
+    // and the same "-c"-style codes, so they build identically.
+    const fromArray = (raw, lib) => (Array.isArray(raw) ? raw : [])
+        .map(item => buildEntry(lib, item.pantone, item.hex, null))
         .filter(Boolean);
 
+    const C = fromArray(coatedRaw, 'C');
     const TCX = Object.entries(tcxRaw || {})
         .map(([code, v]) => buildEntry('TCX', code, v.hex, titleCase(v.name || '')))
         .filter(Boolean);
+    const METALLIC = fromArray(metalRaw, 'METALLIC');
+    const PASTEL = fromArray(pastelRaw, 'PASTEL');
 
-    const MIXED = [...C, ...TCX];
+    const MIXED = [...C, ...TCX, ...METALLIC, ...PASTEL];
 
     return {
-        C, TCX, MIXED,
-        cols: { C: toColumns(C), TCX: toColumns(TCX), MIXED: toColumns(MIXED) },
+        C, TCX, METALLIC, PASTEL, MIXED,
+        cols: {
+            C: toColumns(C), TCX: toColumns(TCX),
+            METALLIC: toColumns(METALLIC), PASTEL: toColumns(PASTEL),
+            MIXED: toColumns(MIXED),
+        },
     };
 }
